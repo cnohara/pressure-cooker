@@ -52,6 +52,7 @@ export interface SessionState {
 	llm2Model: string;
 	llm1Instruction: string;
 	llm2Instruction: string;
+	pauseBetweenRounds?: boolean;
 	totalRounds: number;
 	rounds: RoundOutput[];
 	finalBuilderOutput: string;

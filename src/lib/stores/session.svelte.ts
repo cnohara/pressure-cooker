@@ -31,12 +31,12 @@ function roundAwarenessNote(currentRound: number, totalRounds: number, role: 'bu
 
 	if (role === 'builder') {
 		if (currentRound > totalRounds) {
-			return `\n\n[FINAL SYNTHESIS — ${totalRounds} rounds of critique complete] The critic has delivered their final assessment. Now produce your definitive, polished final response that fully incorporates all feedback. This is the version that will be presented as the final output.`;
+			return `\n\n[FINAL SYNTHESIS — ${totalRounds} rounds of critique complete] The critic has delivered their final assessment. You may open with a brief paragraph (2–4 sentences) acknowledging the critic's key final points. After that, your response MUST contain the complete, polished deliverable — the full document, plan, email, decision, or output the user asked for — ready to use as-is. The deliverable is mandatory; do not end your response with commentary alone.`;
 		}
 		if (isFinal) {
-			return `\n\n[ROUND ${currentRound} OF ${totalRounds} — FINAL ROUND] This is your last opportunity to refine. Produce your most complete, robust version of the plan, addressing all remaining criticisms as thoroughly as possible.`;
+			return `\n\n[ROUND ${currentRound} OF ${totalRounds} — FINAL ROUND] This is your last opportunity to refine. Produce your most complete, robust version — the actual deliverable itself, fully addressing all criticisms.`;
 		}
-		return `\n\n[ROUND ${currentRound} OF ${totalRounds} — ${remaining} round${remaining === 1 ? '' : 's'} remaining] You and the critic have ${totalRounds} rounds to converge on a robust plan. Respond substantively to criticisms — each round you should meaningfully improve the plan.`;
+		return `\n\n[ROUND ${currentRound} OF ${totalRounds} — ${remaining} round${remaining === 1 ? '' : 's'} remaining] You and the critic have ${totalRounds} rounds to converge. Each round, produce the actual improved deliverable — not commentary about what you changed.`;
 	} else {
 		if (isFinal) {
 			return `\n\n[ROUND ${currentRound} OF ${totalRounds} — FINAL ROUND] This is the last critique. Focus only on the most critical unresolved issues that would prevent successful implementation. After your critique, you MUST end with exactly this line:\nCONVERGENCE: <number>\nWhere <number> is 0–100 representing how completely the builder has addressed all major concerns (0 = nothing addressed, 100 = fully resolved).`;
@@ -166,6 +166,198 @@ async function runStream(
 	return { tokens: 0, cost: 0, generationId };
 }
 
+type SessionRunConfig = {
+	apiKey: string;
+	llm1Model: string;
+	llm2Model: string;
+	topic: string;
+	totalRounds: number;
+	summaryEnabled: boolean;
+	pauseBetweenRounds: boolean;
+};
+
+async function runRounds(config: SessionRunConfig, startRound: number) {
+	if (!session) return;
+
+	for (let r = startRound; r <= config.totalRounds; r++) {
+		if (session.status === 'stopped') break;
+
+		const round: RoundOutput = {
+			roundNumber: r,
+			builderOutput: '',
+			criticOutput: '',
+			builderTokensUsed: 0,
+			criticTokensUsed: 0,
+			actualCost: 0,
+			status: 'builder_streaming'
+		};
+		session.rounds = [...session.rounds, round];
+
+		const builderMsgs = buildBuilderMessages(
+			pauseInstructions.llm1,
+			config.topic,
+			config.totalRounds,
+			session.rounds.slice(0, -1),
+			r
+		);
+
+		try {
+			const { tokens, cost } = await runStream(
+				config.apiKey,
+				config.llm1Model,
+				builderMsgs,
+				(text) => {
+					const idx = session!.rounds.length - 1;
+					session!.rounds[idx] = { ...session!.rounds[idx], builderOutput: session!.rounds[idx].builderOutput + text };
+				},
+				20000
+			);
+			const idx = session.rounds.length - 1;
+			session.rounds[idx] = { ...session.rounds[idx], builderTokensUsed: tokens, actualCost: cost, status: 'critic_streaming' };
+		} catch (e) {
+			await handleStreamError(e, r, 'Builder');
+			if ((session.status as SessionState['status']) === 'stopped' || session.status === 'error') break;
+		}
+
+		if ((session.status as SessionState['status']) === 'stopped') break;
+
+		const idx = session.rounds.length - 1;
+		const criticMsgs = buildCriticMessages(
+			pauseInstructions.llm2,
+			config.topic,
+			config.totalRounds,
+			r,
+			session.rounds[idx].builderOutput
+		);
+
+		try {
+			const { tokens, cost } = await runStream(
+				config.apiKey,
+				config.llm2Model,
+				criticMsgs,
+				(text) => {
+					const i = session!.rounds.length - 1;
+					session!.rounds[i] = { ...session!.rounds[i], criticOutput: session!.rounds[i].criticOutput + text };
+				},
+				20000
+			);
+			const rawCritic = session.rounds[idx].criticOutput;
+			const convergenceScore = parseConvergenceScore(rawCritic);
+			const cleanCritic = stripConvergenceLine(rawCritic);
+			session.rounds[idx] = {
+				...session.rounds[idx],
+				criticOutput: cleanCritic,
+				criticTokensUsed: tokens,
+				actualCost: session.rounds[idx].actualCost + cost,
+				status: 'complete',
+				convergenceScore
+			};
+			session.totalActualCost += session.rounds[idx].actualCost;
+		} catch (e) {
+			await handleStreamError(e, r, 'Critic');
+			if ((session.status as SessionState['status']) === 'stopped' || session.status === 'error') break;
+		}
+
+		if ((session.status as SessionState['status']) === 'stopped') break;
+
+		if (config.pauseBetweenRounds && r < config.totalRounds) {
+			session = { ...session, status: 'paused' };
+			await new Promise<void>((resolve) => {
+				const check = setInterval(() => {
+					if (!session || session.status !== 'paused') {
+						clearInterval(check);
+						resolve();
+					}
+				}, 200);
+			});
+			if ((session.status as SessionState['status']) === 'stopped') break;
+			session = { ...session, status: 'running' };
+		}
+	}
+}
+
+async function runFinalBuilderSynthesis(config: SessionRunConfig) {
+	if (!session || (session.status as SessionState['status']) === 'stopped') return;
+
+	session = { ...session, finalBuilderStatus: 'streaming' };
+	const finalBuilderMsgs = buildBuilderMessages(
+		pauseInstructions.llm1,
+		config.topic,
+		config.totalRounds,
+		session.rounds,
+		config.totalRounds + 1
+	);
+	try {
+		const { cost } = await runStream(
+			config.apiKey,
+			config.llm1Model,
+			finalBuilderMsgs,
+			(text) => { session!.finalBuilderOutput += text; },
+			20000
+		);
+		session = { ...session, finalBuilderStatus: 'complete', finalBuilderCost: cost };
+		session.totalActualCost += cost;
+	} catch (e) {
+		session = { ...session, finalBuilderStatus: 'complete' };
+		await handleStreamError(e, config.totalRounds + 1, 'Builder (final synthesis)');
+	}
+}
+
+async function runSummary(config: SessionRunConfig) {
+	if (!session || !config.summaryEnabled || (session.status as SessionState['status']) === 'stopped') return;
+
+	session = { ...session, summaryStatus: 'streaming' };
+	const SUMMARY_MODEL = 'google/gemini-2.0-flash-001';
+	const summaryModelId = SUMMARY_MODEL;
+	if (!summaryModelId) return;
+
+	const finalPlan = session.rounds[session.rounds.length - 1]?.builderOutput ?? '';
+	let summaryText = `Topic: ${config.topic}\n\n`;
+	summaryText += `Final plan (after ${session.rounds.length} rounds of refinement):\n${finalPlan}\n\n`;
+	summaryText += `Critiques across rounds:\n`;
+	for (const round of session.rounds) {
+		summaryText += `Round ${round.roundNumber}: ${round.criticOutput.slice(0, 600)}\n\n`;
+	}
+	summaryText += `In under 300 words, provide:\n1. What meaningfully improved across rounds\n2. What the critic consistently flagged\n3. What remains unresolved in the final plan\n\nBe concise and specific. Do not pad or repeat.`;
+
+	const summaryMsgs = [
+		{ role: 'system', content: 'You are a concise analyst.' },
+		{ role: 'user', content: summaryText }
+	];
+
+	try {
+		await runStream(
+			config.apiKey,
+			summaryModelId,
+			summaryMsgs,
+			(text) => { session!.summaryOutput += text; },
+			20000
+		);
+		session = { ...session, summaryStatus: 'complete' };
+	} catch {
+		session = { ...session, summaryStatus: 'complete' };
+	}
+}
+
+async function finalizeSessionRun(config: SessionRunConfig) {
+	if (!session) return;
+
+	if ((session.status as SessionState['status']) === 'stopped') {
+		saveToHistory(session);
+		return;
+	}
+
+	await runFinalBuilderSynthesis(config);
+	if ((session.status as SessionState['status']) === 'stopped' || session.status === 'error') {
+		saveToHistory(session);
+		return;
+	}
+
+	await runSummary(config);
+	session = { ...session, status: 'complete', completedAt: new Date().toISOString() };
+	saveToHistory(session);
+}
+
 export async function startSession(config: {
 	apiKey: string;
 	llm1Model: string;
@@ -187,6 +379,7 @@ export async function startSession(config: {
 		llm2Model: config.llm2Model,
 		llm1Instruction: config.llm1Instruction,
 		llm2Instruction: config.llm2Instruction,
+		pauseBetweenRounds: config.pauseBetweenRounds,
 		totalRounds: config.totalRounds,
 		rounds: [],
 		finalBuilderOutput: '',
@@ -203,179 +396,47 @@ export async function startSession(config: {
 	};
 
 	try {
-		for (let r = 1; r <= config.totalRounds; r++) {
-			if (session.status === 'stopped') break;
-
-			const round: RoundOutput = {
-				roundNumber: r,
-				builderOutput: '',
-				criticOutput: '',
-				builderTokensUsed: 0,
-				criticTokensUsed: 0,
-				actualCost: 0,
-				status: 'builder_streaming'
-			};
-			session.rounds = [...session.rounds, round];
-
-			// Builder
-			const builderMsgs = buildBuilderMessages(
-				pauseInstructions.llm1,
-				config.topic,
-				config.totalRounds,
-				session.rounds.slice(0, -1),
-				r
-			);
-
-			try {
-				const { tokens, cost } = await runStream(
-					config.apiKey,
-					config.llm1Model,
-					builderMsgs,
-					(text) => {
-						const idx = session!.rounds.length - 1;
-						session!.rounds[idx] = { ...session!.rounds[idx], builderOutput: session!.rounds[idx].builderOutput + text };
-					},
-					20000
-				);
-				const idx = session.rounds.length - 1;
-				session.rounds[idx] = { ...session.rounds[idx], builderTokensUsed: tokens, actualCost: cost, status: 'critic_streaming' };
-			} catch (e) {
-				await handleStreamError(e, r, 'Builder');
-				if ((session.status as SessionState['status']) === 'stopped' || session.status === 'error') break;
-			}
-
-			if ((session.status as SessionState['status']) === 'stopped') break;
-
-			// Critic
-			const idx = session.rounds.length - 1;
-			const criticMsgs = buildCriticMessages(
-				pauseInstructions.llm2,
-				config.topic,
-				config.totalRounds,
-				r,
-				session.rounds[idx].builderOutput
-			);
-
-			try {
-				const { tokens, cost } = await runStream(
-					config.apiKey,
-					config.llm2Model,
-					criticMsgs,
-					(text) => {
-						const i = session!.rounds.length - 1;
-						session!.rounds[i] = { ...session!.rounds[i], criticOutput: session!.rounds[i].criticOutput + text };
-					},
-					20000
-				);
-				// Parse convergence score and strip it from display text
-				const rawCritic = session.rounds[idx].criticOutput;
-				const convergenceScore = parseConvergenceScore(rawCritic);
-				const cleanCritic = stripConvergenceLine(rawCritic);
-				session.rounds[idx] = {
-					...session.rounds[idx],
-					criticOutput: cleanCritic,
-					criticTokensUsed: tokens,
-					actualCost: session.rounds[idx].actualCost + cost,
-					status: 'complete',
-					convergenceScore
-				};
-				session.totalActualCost += session.rounds[idx].actualCost;
-			} catch (e) {
-				await handleStreamError(e, r, 'Critic');
-				if ((session.status as SessionState['status']) === 'stopped' || session.status === 'error') break;
-			}
-
-			if ((session.status as SessionState['status']) === 'stopped') break;
-
-			// Pause between rounds
-			if (config.pauseBetweenRounds && r < config.totalRounds) {
-				session = { ...session, status: 'paused' };
-				// Wait for resume
-				await new Promise<void>((resolve) => {
-					const check = setInterval(() => {
-						if (!session || session.status !== 'paused') {
-							clearInterval(check);
-							resolve();
-						}
-					}, 200);
-				});
-				if ((session.status as SessionState['status']) === 'stopped') break;
-				session = { ...session, status: 'running' };
-			}
-		}
-
-		if ((session.status as SessionState['status']) === 'stopped') {
+		await runRounds(config, 1);
+		await finalizeSessionRun(config);
+	} catch (e) {
+		if (session) {
+			session = { ...session, status: 'error', errorMessage: String(e) };
 			saveToHistory(session);
-			return;
 		}
+	}
+}
 
-		// Final builder synthesis — one extra builder turn to incorporate the last critic's feedback
-		session = { ...session, finalBuilderStatus: 'streaming' };
-		const finalBuilderMsgs = buildBuilderMessages(
-			pauseInstructions.llm1,
-			config.topic,
-			config.totalRounds,
-			session.rounds,
-			config.totalRounds + 1
-		);
-		try {
-			const { cost } = await runStream(
-				config.apiKey,
-				config.llm1Model,
-				finalBuilderMsgs,
-				(text) => { session!.finalBuilderOutput += text; },
-				20000
-			);
-			session = { ...session, finalBuilderStatus: 'complete', finalBuilderCost: cost };
-			session.totalActualCost += cost;
-		} catch (e) {
-			session = { ...session, finalBuilderStatus: 'complete' };
-			await handleStreamError(e, config.totalRounds + 1, 'Builder (final synthesis)');
-			if ((session.status as SessionState['status']) === 'stopped' || session.status === 'error') {
-				saveToHistory(session);
-				return;
-			}
-		}
+export async function extendSession(apiKey: string, additionalRounds: number) {
+	if (!session || session.status !== 'complete' || additionalRounds < 1) return;
 
-		// Summary
-		if (config.summaryEnabled && (session.status as SessionState['status']) !== 'stopped') {
-			session = { ...session, summaryStatus: 'streaming' };
-			// Use a reliable fast model — NOT cheapest (low-quality models hallucinate badly on long prompts)
-			const SUMMARY_MODEL = 'google/gemini-2.0-flash-001';
-			const summaryModelId = SUMMARY_MODEL;
-			if (summaryModelId) {
-				// Only send the final plan + all critiques to keep the prompt focused and short
-				const finalPlan = session.rounds[session.rounds.length - 1]?.builderOutput ?? '';
-				let summaryText = `Topic: ${config.topic}\n\n`;
-				summaryText += `Final plan (after ${session.rounds.length} rounds of refinement):\n${finalPlan}\n\n`;
-				summaryText += `Critiques across rounds:\n`;
-				for (const round of session.rounds) {
-					summaryText += `Round ${round.roundNumber}: ${round.criticOutput.slice(0, 600)}\n\n`;
-				}
-				summaryText += `In under 300 words, provide:\n1. What meaningfully improved across rounds\n2. What the critic consistently flagged\n3. What remains unresolved in the final plan\n\nBe concise and specific. Do not pad or repeat.`;
+	abortController = new AbortController();
+	const nextTotalRounds = session.totalRounds + additionalRounds;
+	const config: SessionRunConfig = {
+		apiKey,
+		llm1Model: session.llm1Model,
+		llm2Model: session.llm2Model,
+		topic: session.topic,
+		totalRounds: nextTotalRounds,
+		summaryEnabled: session.summaryEnabled,
+		pauseBetweenRounds: session.pauseBetweenRounds ?? false
+	};
 
-				const summaryMsgs = [
-					{ role: 'system', content: 'You are a concise analyst.' },
-					{ role: 'user', content: summaryText }
-				];
+	session = {
+		...session,
+		totalRounds: nextTotalRounds,
+		status: 'running',
+		completedAt: null,
+		errorMessage: null,
+		finalBuilderOutput: '',
+		finalBuilderStatus: 'idle',
+		finalBuilderCost: 0,
+		summaryOutput: '',
+		summaryStatus: 'idle'
+	};
 
-				try {
-					await runStream(
-						config.apiKey,
-						summaryModelId,
-						summaryMsgs,
-						(text) => { session!.summaryOutput += text; },
-						20000
-					);
-					session = { ...session, summaryStatus: 'complete' };
-				} catch {
-					session = { ...session, summaryStatus: 'complete' };
-				}
-			}
-		}
-
-		session = { ...session, status: 'complete', completedAt: new Date().toISOString() };
-		saveToHistory(session);
+	try {
+		await runRounds(config, session.rounds.length + 1);
+		await finalizeSessionRun(config);
 	} catch (e) {
 		if (session) {
 			session = { ...session, status: 'error', errorMessage: String(e) };

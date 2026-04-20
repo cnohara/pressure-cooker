@@ -6,8 +6,9 @@
 	import StreamingPanel from '$lib/components/StreamingPanel.svelte';
 	import SummaryCard from '$lib/components/SummaryCard.svelte';
 	import Topbar from '$lib/components/Topbar.svelte';
-	import { getSession, resetSession, stopSession } from '$lib/stores/session.svelte';
+	import { extendSession, getSession, resetSession, stopSession } from '$lib/stores/session.svelte';
 	import { findModel } from '$lib/stores/models.svelte';
+	import { loadKey } from '$lib/utils/storage';
 
 	const session = $derived(getSession());
 	const isComplete = $derived(session?.status === 'complete' || session?.status === 'stopped' || session?.status === 'error');
@@ -19,6 +20,8 @@
 	);
 	let now = $state(Date.now());
 	let autoFollowLatest = $state(true);
+	let continueRounds = $state(2);
+	let isContinuing = $state(false);
 
 	let selectedRoundNumber = $state<number | null>(null);
 
@@ -76,6 +79,17 @@
 		selectedRoundNumber = round;
 		const latestRound = session?.rounds[session.rounds.length - 1]?.roundNumber ?? round;
 		autoFollowLatest = round === latestRound;
+	}
+
+	async function handleContinue(rounds: number) {
+		const apiKey = loadKey();
+		if (!apiKey) return;
+		isContinuing = true;
+		try {
+			await extendSession(apiKey, rounds);
+		} finally {
+			isContinuing = false;
+		}
 	}
 
 	function builderStatusLabel() {
@@ -173,6 +187,10 @@
 								content={session.finalBuilderOutput}
 								modelId={builderModelName}
 								streaming={session.finalBuilderStatus === 'streaming'}
+								canContinue={session.status === 'complete'}
+								continueRounds={continueRounds}
+								continueBusy={isContinuing}
+								onContinue={handleContinue}
 							/>
 							{#if session.summaryEnabled && session.summaryStatus !== 'idle'}
 								<SummaryCard {session} />
