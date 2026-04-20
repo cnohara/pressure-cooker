@@ -1,329 +1,519 @@
 <script lang="ts">
+	type Mood = 'burnt' | 'argued' | 'simmer' | 'simmer-high' | 'cooked';
+
 	let {
-		convergenceScores = [],
-		totalRounds = 1,
-		sessionStatus = 'idle'
+		convergenceScore = 0,
+		roundCount = 1,
+		currentRound = 1,
+		moodOverride
 	}: {
-		convergenceScores: (number | undefined)[];
-		totalRounds: number;
-		sessionStatus: string;
+		convergenceScore?: number;
+		roundCount?: number;
+		currentRound?: number;
+		moodOverride?: Mood;
 	} = $props();
 
-	const isActive = $derived(sessionStatus === 'running' || sessionStatus === 'paused');
-	const isComplete = $derived(sessionStatus === 'complete' || sessionStatus === 'stopped');
-
-	const latestScore = $derived.by(() => {
-		const scored = convergenceScores.filter((s): s is number => s !== undefined);
-		return scored.length ? scored[scored.length - 1] : 0;
+	const mood = $derived.by<Mood>(() => {
+		if (moodOverride) return moodOverride;
+		if (convergenceScore < 25) return 'burnt';
+		if (convergenceScore < 55) return 'argued';
+		if (convergenceScore < 75) return 'simmer';
+		if (convergenceScore < 90) return 'simmer-high';
+		return 'cooked';
 	});
 
-	const gaugeColor = $derived.by(() => {
-		if (latestScore < 30) return '#ef4444';
-		if (latestScore < 60) return '#f97316';
-		if (latestScore < 80) return '#eab308';
-		return '#22c55e';
+	const moodLabel = $derived.by(() =>
+		({
+			burnt: 'burning - stuck arguing',
+			argued: 'heated debate',
+			simmer: 'simmering nicely',
+			'simmer-high': 'almost there',
+			cooked: 'perfectly cooked'
+		})[mood]
+	);
+
+	const palette = $derived.by(() => {
+		switch (mood) {
+			case 'burnt':
+				return {
+					body: '#8e4123',
+					bodyTop: '#c6633d',
+					bodyBottom: '#5d2813',
+					highlight: '#db8f62',
+					shadow: '#4d2312',
+					lidTop: '#5d5148',
+					lidMid: '#4f463f',
+					lidLow: '#3f3833',
+					weight: '#2b1910',
+					burner: '#2d2723'
+				};
+			case 'cooked':
+				return {
+					body: '#4f765e',
+					bodyTop: '#7ba187',
+					bodyBottom: '#355142',
+					highlight: '#8db49a',
+					shadow: '#24382d',
+					lidTop: '#617568',
+					lidMid: '#55675b',
+					lidLow: '#45544a',
+					weight: '#25352b',
+					burner: '#30473b'
+				};
+			default:
+				return {
+					body: '#b4562a',
+					bodyTop: '#c97142',
+					bodyBottom: '#7a3a1c',
+					highlight: '#d98b5c',
+					shadow: '#5e2c15',
+					lidTop: '#6a5a50',
+					lidMid: '#5a4a40',
+					lidLow: '#4a3f35',
+					weight: '#3a1e0e',
+					burner: '#3a3230'
+				};
+		}
 	});
 
-	const pressureLabel = $derived.by(() => {
-		if (!isActive && !isComplete) return '';
-		if (latestScore < 20) return 'Raw';
-		if (latestScore < 45) return 'Heating';
-		if (latestScore < 65) return 'Simmering';
-		if (latestScore < 80) return 'Pressurized';
-		if (latestScore < 95) return 'Nearly Done';
-		return 'Fully Cooked!';
+	const stageClass = $derived.by(() => {
+		if (mood === 'burnt') return 'state-burnt';
+		if (mood === 'cooked') return 'state-cooked';
+		return '';
 	});
-
-	const needleAngle = $derived(-90 + latestScore * 1.8);
-
-	function describeArc(pct: number): string {
-		const cx = 50, cy = 50, r = 38;
-		if (pct <= 0) return '';
-		if (pct >= 100) pct = 99.9;
-		const startRad = Math.PI;
-		const endRad = Math.PI - (pct / 100) * Math.PI;
-		const x1 = cx + r * Math.cos(startRad);
-		const y1 = cy + r * Math.sin(startRad);
-		const x2 = cx + r * Math.cos(endRad);
-		const y2 = cy + r * Math.sin(endRad);
-		const large = pct > 50 ? 1 : 0;
-		return `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`;
-	}
 </script>
 
-<div class="flex flex-col items-center gap-3 select-none">
+<div class={`pot-stage ${stageClass}`}>
+	<div class="pot-stage-title">
+		<span>
+			Pot
+			<span class={`mood-chip ${mood}`}>{moodLabel}</span>
+		</span>
+		<span class="round">Round {String(currentRound).padStart(2, '0')} / {String(roundCount).padStart(2, '0')}</span>
+	</div>
 
-	<!--
-		Pixel-art pressure cooker — 32×44 pixel grid, each pixel = 3px → 96×132 display.
-		Shape: round pot (oval body), flat lid, knob handle, steam wisps, flames underneath.
-		Palette:
-		  Pot body:     #4a3f8c (dark purple) / #6257a8 (mid) / #7a6ec0 (highlight)
-		  Lid:          #3d3475 / #544a9e
-		  Knob:         #1a1535
-		  Steam:        #c7d2fe at 70%
-		  Flame orange: #f97316 / red: #dc2626 / yellow: #fbbf24 / dark: #7c2d12
-	-->
-	<svg
-		width="96"
-		height="132"
-		viewBox="0 0 96 132"
-		shape-rendering="crispEdges"
-		class="overflow-visible pixel-cooker"
-		class:active={isActive}
-		class:done={isComplete}
-		aria-label="Pressure cooker animation"
-	>
-		<!-- ═══ STEAM (above knob, animated when active) ═══ -->
-		{#if isActive}
-			<g class="steam-group" opacity="0.75">
-				<!-- left wisp -->
-				<rect x="33" y="3"  width="3" height="6" fill="#c7d2fe" class="steam-a"/>
-				<rect x="30" y="0"  width="3" height="3" fill="#c7d2fe" class="steam-a"/>
-				<!-- centre wisp -->
-				<rect x="45" y="0"  width="3" height="9" fill="#e0e7ff" class="steam-b"/>
-				<rect x="48" y="0"  width="3" height="6" fill="#c7d2fe" class="steam-b"/>
-				<!-- right wisp -->
-				<rect x="60" y="3"  width="3" height="6" fill="#c7d2fe" class="steam-c"/>
-				<rect x="63" y="0"  width="3" height="3" fill="#c7d2fe" class="steam-c"/>
-			</g>
-		{/if}
-
-		<!-- ═══ LID KNOB / HANDLE ═══ -->
-		<rect x="42" y="12" width="12" height="3"  fill="#1a1535"/>
-		<rect x="39" y="15" width="18" height="3"  fill="#2d2660"/>
-		<rect x="39" y="15" width="18" height="1"  fill="#4a4090"/><!-- knob top sheen -->
-
-		<!-- ═══ LID ═══ -->
-		<!-- lid highlight row -->
-		<rect x="18" y="18" width="60" height="3"  fill="#7a6ec0"/>
-		<!-- lid main -->
-		<rect x="15" y="21" width="66" height="9"  fill="#544a9e"/>
-		<!-- lid left sheen -->
-		<rect x="15" y="21" width="6"  height="9"  fill="#6b60b8"/>
-		<!-- lid right shadow -->
-		<rect x="75" y="21" width="6"  height="9"  fill="#3d3475"/>
-		<!-- lid bottom edge -->
-		<rect x="15" y="30" width="66" height="3"  fill="#2d2660"/>
-
-		<!-- ═══ POT BODY — stepped oval ═══ -->
-		<!-- step in from lid: row 33 -->
-		<rect x="21" y="33" width="54" height="3"  fill="#5a4fa6"/>
-		<rect x="21" y="33" width="6"  height="3"  fill="#7a6ec0"/><!-- hl -->
-		<rect x="69" y="33" width="6"  height="3"  fill="#3d3475"/><!-- sh -->
-
-		<!-- row 36: wider -->
-		<rect x="18" y="36" width="60" height="3"  fill="#5a4fa6"/>
-		<rect x="18" y="36" width="6"  height="3"  fill="#7a6ec0"/>
-		<rect x="72" y="36" width="6"  height="3"  fill="#3d3475"/>
-
-		<!-- row 39: widest -->
-		<rect x="15" y="39" width="66" height="3"  fill="#5a4fa6"/>
-		<rect x="15" y="39" width="6"  height="3"  fill="#7a6ec0"/>
-		<rect x="75" y="39" width="6"  height="3"  fill="#3d3475"/>
-
-		<!-- HANDLES (sticking out at mid-body) -->
-		<!-- left handle -->
-		<rect x="0"  y="45" width="15" height="18" fill="#3d3475"/>
-		<rect x="0"  y="45" width="15" height="3"  fill="#544a9e"/><!-- handle top -->
-		<rect x="0"  y="60" width="15" height="3"  fill="#1a1535"/><!-- handle bottom -->
-		<rect x="0"  y="48" width="3"  height="12" fill="#544a9e"/><!-- handle left sheen -->
-		<!-- right handle -->
-		<rect x="81" y="45" width="15" height="18" fill="#3d3475"/>
-		<rect x="81" y="45" width="15" height="3"  fill="#544a9e"/>
-		<rect x="81" y="60" width="15" height="3"  fill="#1a1535"/>
-		<rect x="93" y="48" width="3"  height="12" fill="#1a1535"/>
-
-		<!-- body main flat section -->
-		<rect x="15" y="42" width="66" height="33" fill="#4a3f8c"/>
-		<!-- body left highlight strip -->
-		<rect x="15" y="42" width="9"  height="33" fill="#6257a8"/>
-		<!-- body right shadow strip -->
-		<rect x="72" y="42" width="9"  height="33" fill="#2d2460"/>
-
-		<!-- body bottom steps (oval curve) -->
-		<rect x="15" y="75" width="66" height="3"  fill="#4a3f8c"/>
-		<rect x="15" y="75" width="9"  height="3"  fill="#6257a8"/>
-		<rect x="72" y="75" width="9"  height="3"  fill="#2d2460"/>
-
-		<rect x="18" y="78" width="60" height="3"  fill="#3d3475"/>
-		<rect x="21" y="81" width="54" height="3"  fill="#2d2660"/>
-		<rect x="27" y="84" width="42" height="3"  fill="#1a1535"/>
-
-		<!-- Pressure gauge mini display on body -->
-		<rect x="33" y="51" width="30" height="15" fill="#0f0d1f"/><!-- bezel -->
-		<rect x="34" y="52" width="28" height="13" fill="#0a0818"/><!-- screen -->
-		<!-- bar fill -->
-		{#if (isActive || isComplete) && latestScore > 0}
-			<rect x="35" y="57" width={Math.round((latestScore / 100) * 26)} height="5" fill={gaugeColor}/>
+	<div class="pot-wrap">
+		{#if mood === 'burnt'}
+			<span class="smoke" style="bottom:175px; left: calc(50% - 10px); animation-delay: 0s;"></span>
+			<span class="smoke" style="bottom:175px; left: calc(50% + 6px); animation-delay: 0.6s;"></span>
+			<span class="smoke" style="bottom:175px; left: calc(50% + 18px); animation-delay: 1.2s; width:10px; height:10px;"></span>
+			<span class="smoke" style="bottom:175px; left: calc(50% - 14px); animation-delay: 1.6s; width:12px; height:12px;"></span>
+			<span class="spark" style="bottom:40px; left: calc(50% - 20px); --sx: -18px; animation-delay: 0.2s;"></span>
+			<span class="spark" style="bottom:38px; left: calc(50% + 22px); --sx: 24px; animation-delay: 0.8s;"></span>
+			<span class="spark" style="bottom:42px; left: calc(50% - 8px); --sx: -10px; animation-delay: 1.1s;"></span>
 		{:else}
-			<rect x="35" y="57" width="0"  height="5" fill="#1a1535"/>
-		{/if}
-		<!-- bar bg -->
-		<rect x="35" y="57" width="26" height="1"  fill="#1a1535" opacity="0.5"/>
-		<!-- tick marks -->
-		<rect x="35" y="53" width="1"  height="3"  fill="#2d2a50"/>
-		<rect x="48" y="53" width="1"  height="3"  fill="#2d2a50"/>
-		<rect x="60" y="53" width="1"  height="3"  fill="#2d2a50"/>
+			<span class="steam s1" style="bottom:175px; left: calc(50% - 14px);"></span>
+			<span class="steam s2" style="bottom:175px; left: calc(50% + 12px);"></span>
+			<span class="steam s3" style="bottom:175px; left: calc(50% - 6px);"></span>
+			<span class="steam s4" style="bottom:175px; left: calc(50% + 4px);"></span>
 
-		<!-- completion overlay tint -->
-		{#if isComplete}
-			<rect x="15" y="18" width="66" height="72" fill="#22c55e" opacity="0.07"/>
-		{/if}
-
-		<!-- ═══ FLAMES ═══ -->
-		{#if isActive || isComplete}
-			<!-- flame base plate -->
-			<rect x="9"  y="90" width="78" height="3"  fill="#7c2d12"/>
-
-			<!-- dark base -->
-			<rect x="9"  y="93" width="78" height="3"  fill="#dc2626"/>
-			<rect x="12" y="96" width="72" height="3"  fill="#dc2626"/>
-
-			<!-- orange layer -->
-			<rect x="9"  y="93" width="12" height="12" fill="#ea580c"/>
-			<rect x="75" y="93" width="12" height="12" fill="#ea580c"/>
-			<rect x="21" y="90" width="54" height="15" fill="#f97316"/>
-
-			<!-- yellow tips — 5 flame columns -->
-			<!-- flame 1 (left) -->
-			<rect x="12" y="87" width="9"  height="9"  fill="#f97316"/>
-			<rect x="15" y="84" width="3"  height="3"  fill="#fbbf24"/>
-			<!-- flame 2 -->
-			<rect x="27" y="84" width="12" height="12" fill="#f97316"/>
-			<rect x="30" y="81" width="6"  height="3"  fill="#fbbf24"/>
-			<rect x="33" y="78" width="3"  height="3"  fill="#fef08a"/>
-			<!-- flame 3 (centre, tallest) -->
-			<rect x="42" y="81" width="12" height="15" fill="#f97316"/>
-			<rect x="45" y="75" width="6"  height="9"  fill="#fbbf24"/>
-			<rect x="46" y="72" width="4"  height="3"  fill="#fef08a"/>
-			<!-- flame 4 -->
-			<rect x="57" y="84" width="12" height="12" fill="#f97316"/>
-			<rect x="60" y="81" width="6"  height="3"  fill="#fbbf24"/>
-			<rect x="63" y="78" width="3"  height="3"  fill="#fef08a"/>
-			<!-- flame 5 (right) -->
-			<rect x="75" y="87" width="9"  height="9"  fill="#f97316"/>
-			<rect x="78" y="84" width="3"  height="3"  fill="#fbbf24"/>
-
-			<!-- flame shimmer animation overlay -->
-			<rect x="42" y="78" width="12" height="3"  fill="#fbbf24" class="flame-flicker" opacity="0.8"/>
-		{:else}
-			<!-- cold stove grate -->
-			<rect x="9"  y="90" width="78" height="3"  fill="#1f2937"/>
-			<rect x="9"  y="93" width="78" height="9"  fill="#111827"/>
-			<rect x="12" y="93" width="3"  height="9"  fill="#1f2937"/>
-			<rect x="27" y="93" width="3"  height="9"  fill="#1f2937"/>
-			<rect x="42" y="93" width="3"  height="9"  fill="#1f2937"/>
-			<rect x="57" y="93" width="3"  height="9"  fill="#1f2937"/>
-			<rect x="72" y="93" width="3"  height="9"  fill="#1f2937"/>
-		{/if}
-	</svg>
-
-	<!-- ═══ Convergence Pressure Gauge ═══ -->
-	{#if isActive || isComplete}
-		<div class="flex flex-col items-center gap-1">
-			<svg width="100" height="60" viewBox="0 0 100 60" style="overflow:visible">
-				<!-- background arc -->
-				<path d="M 12 50 A 38 38 0 0 1 88 50" fill="none" stroke="#2a2a2a" stroke-width="7" stroke-linecap="butt"/>
-				<!-- fill arc -->
-				{#if latestScore > 0}
-					<path
-						d={describeArc(latestScore)}
-						fill="none"
-						stroke={gaugeColor}
-						stroke-width="7"
-						stroke-linecap="butt"
-						style="transition: stroke 0.5s;"
-					/>
-				{/if}
-				<!-- tick marks -->
-				{#each [0, 25, 50, 75, 100] as pct}
-					{@const ang = Math.PI - (pct / 100) * Math.PI}
-					<line
-						x1={(50 + 44 * Math.cos(ang)).toFixed(1)}
-						y1={(50 + 44 * Math.sin(ang)).toFixed(1)}
-						x2={(50 + 36 * Math.cos(ang)).toFixed(1)}
-						y2={(50 + 36 * Math.sin(ang)).toFixed(1)}
-						stroke="#374151"
-						stroke-width="1.5"
-					/>
-				{/each}
-				<!-- needle -->
-				<g
-					transform="translate(50,50) rotate({needleAngle})"
-					style="transition: transform 0.8s cubic-bezier(.34,1.56,.64,1);"
-				>
-					<line x1="0" y1="5" x2="0" y2="-30" stroke={gaugeColor} stroke-width="2" stroke-linecap="round" style="transition: stroke 0.5s;"/>
-					<circle cx="0" cy="0" r="4" fill="#111" stroke={gaugeColor} stroke-width="1.5"/>
-				</g>
-				<!-- score -->
-				<text
-					x="50" y="54"
-					text-anchor="middle"
-					font-family="'JetBrains Mono',monospace"
-					font-size="11"
-					font-weight="bold"
-					fill={gaugeColor}
-					style="transition: fill 0.5s;"
-				>{latestScore}</text>
-				<text x="8"  y="58" text-anchor="middle" font-family="monospace" font-size="8" fill="#4b5563">L</text>
-				<text x="92" y="58" text-anchor="middle" font-family="monospace" font-size="8" fill="#4b5563">H</text>
-			</svg>
-
-			<div class="text-xs font-mono font-semibold min-h-4" style="color:{gaugeColor}; transition: color 0.5s;">
-				{pressureLabel}
-			</div>
-
-			<!-- Per-round dot trail -->
-			{#if convergenceScores.length > 0}
-				<div class="flex items-center gap-1.5">
-					{#each { length: totalRounds } as _, i}
-						{@const score = convergenceScores[i]}
-						<div
-							class="w-2 h-2 transition-all duration-500 border border-[#2a2a2a]"
-							style="background:{score !== undefined ? (score < 30 ? '#ef4444' : score < 60 ? '#f97316' : score < 80 ? '#eab308' : '#22c55e') : '#1a1a1a'}"
-							title={score !== undefined ? `Round ${i + 1}: ${score}` : `Round ${i + 1}: pending`}
-						></div>
-					{/each}
-				</div>
+			{#if mood === 'argued'}
+				<span class="steam s5 fast" style="bottom:175px; left: calc(50% + 20px);"></span>
 			{/if}
 
-			<div class="text-xs text-gray-600 font-mono">Convergence Pressure</div>
-		</div>
-	{/if}
+			{#if mood === 'simmer-high' || mood === 'cooked'}
+				<span class={`sparkle ${mood === 'cooked' ? 'big' : ''}`} style="bottom:180px; left: calc(50% - 30px); animation-delay: 0.3s;"></span>
+				<span class="sparkle" style="bottom:200px; left: calc(50% + 28px); animation-delay: 1.1s;"></span>
+				<span class={`sparkle ${mood === 'cooked' ? 'big' : ''}`} style="bottom:210px; left: calc(50% - 6px); animation-delay: 1.8s;"></span>
+			{/if}
+
+			{#if mood === 'cooked'}
+				<span class="sparkle" style="bottom:175px; left: calc(50% - 48px); animation-delay: 1.6s;"></span>
+				<span class="sparkle big" style="bottom:160px; left: calc(50% + 44px); animation-delay: 2.0s;"></span>
+				<div class="cooked-halo">✓</div>
+			{/if}
+		{/if}
+
+		<svg class="pot-svg" viewBox="0 0 88 90" xmlns="http://www.w3.org/2000/svg" aria-label="Pressure cooker status">
+			<rect x="8" y="78" width="72" height="4" fill={palette.burner} />
+			<rect x="10" y="82" width="68" height="3" fill="#1A1613" />
+
+			<rect x="14" y="76" width="6" height="2" fill="var(--ember)">
+				<animate attributeName="opacity" values="0.5;1;0.5" dur="1.1s" repeatCount="indefinite" />
+			</rect>
+			<rect x="28" y="76" width="6" height="2" fill="var(--ember)">
+				<animate attributeName="opacity" values="1;0.5;1" dur="0.9s" repeatCount="indefinite" />
+			</rect>
+			<rect x="42" y="76" width="6" height="2" fill="var(--ember)">
+				<animate attributeName="opacity" values="0.6;1;0.6" dur="1.3s" repeatCount="indefinite" />
+			</rect>
+			<rect x="56" y="76" width="6" height="2" fill="var(--ember)">
+				<animate attributeName="opacity" values="1;0.7;1" dur="1s" repeatCount="indefinite" />
+			</rect>
+			<rect x="68" y="76" width="6" height="2" fill="var(--ember)">
+				<animate attributeName="opacity" values="0.5;1;0.5" dur="1.2s" repeatCount="indefinite" />
+			</rect>
+
+			<rect x="12" y="38" width="64" height="40" fill={palette.body} />
+			<rect x="12" y="38" width="64" height="4" fill={palette.bodyTop} />
+			<rect x="12" y="72" width="64" height="6" fill={palette.bodyBottom} />
+			<rect x="16" y="44" width="3" height="26" fill={palette.highlight} />
+			<rect x="19" y="44" width="2" height="26" fill={palette.bodyTop} />
+			<rect x="70" y="44" width="4" height="28" fill={palette.shadow} />
+
+			<rect x="14" y="48" width="3" height="3" fill="#3A1E0E" />
+			<rect x="71" y="48" width="3" height="3" fill="#3A1E0E" />
+
+			<rect x="4" y="48" width="8" height="4" fill="#3A1E0E" />
+			<rect x="76" y="48" width="8" height="4" fill="#3A1E0E" />
+			<rect x="4" y="52" width="2" height="2" fill="#1A1613" />
+			<rect x="82" y="52" width="2" height="2" fill="#1A1613" />
+
+			<g class="jiggle">
+				<rect x="10" y="34" width="68" height="4" fill={palette.lidLow} />
+				<rect x="12" y="30" width="64" height="4" fill={palette.lidMid} />
+				<rect x="16" y="26" width="56" height="4" fill={palette.lidTop} />
+				<rect x="22" y="22" width="44" height="4" fill={palette.lidTop} />
+				<rect x="22" y="26" width="3" height="2" fill="#8A7A68" />
+				<rect x="26" y="22" width="4" height="2" fill="#8A7A68" />
+				<rect x="40" y="18" width="8" height="4" fill={palette.weight} />
+				<rect x="42" y="14" width="4" height="4" fill={palette.weight} />
+				<rect x="42" y="12" width="4" height="2" fill="#1A1613" />
+			</g>
+
+			<g transform="translate(60 16)">
+				<rect x="0" y="6" width="4" height="6" fill={palette.weight} />
+				<rect x="-2" y="4" width="8" height="2" fill={palette.weight} />
+				<g transform-origin="2px 4px">
+					<animateTransform
+						attributeName="transform"
+						type="rotate"
+						values="-8 2 4;10 2 4;-8 2 4"
+						dur={mood === 'burnt' ? '0.8s' : mood === 'argued' ? '1.1s' : '1.8s'}
+						repeatCount="indefinite"
+					/>
+					<rect x="1" y="0" width="2" height="4" fill={palette.weight} />
+					<rect x="0" y="0" width="4" height="1" fill="#1A1613" />
+				</g>
+			</g>
+		</svg>
+
+		<div
+			class="heat-glow"
+			style={`background: radial-gradient(ellipse at center, ${
+				mood === 'burnt'
+					? 'rgba(196,53,30,0.6)'
+					: mood === 'cooked'
+						? 'rgba(107,138,122,0.35)'
+						: 'rgba(232,138,42,0.55)'
+			} 0%, transparent 70%);`}
+		></div>
+	</div>
 </div>
 
 <style>
-	.pixel-cooker.active {
-		filter: drop-shadow(0 0 10px #f9731650);
-		animation: pot-throb 2s ease-in-out infinite;
-	}
-	.pixel-cooker.done {
-		filter: drop-shadow(0 0 8px #22c55e50);
-	}
-
-	@keyframes pot-throb {
-		0%, 100% { filter: drop-shadow(0 0 6px #f9731630); }
-		50%       { filter: drop-shadow(0 0 16px #f9731670); }
+	.pot-stage {
+		padding: 18px 22px 22px;
+		border-bottom: 1px dashed var(--line-2);
+		position: relative;
+		background: linear-gradient(180deg, transparent 0%, rgba(180, 86, 42, 0.03) 100%);
 	}
 
-	/* Steam wisps rise and fade */
-	.steam-a { animation: steam-rise 2.0s ease-out 0.0s infinite; }
-	.steam-b { animation: steam-rise 1.6s ease-out 0.7s infinite; }
-	.steam-c { animation: steam-rise 2.2s ease-out 1.3s infinite; }
-
-	@keyframes steam-rise {
-		0%   { opacity: 0.8; transform: translateY(0)   scaleX(1); }
-		50%  { opacity: 0.4; }
-		100% { opacity: 0;   transform: translateY(-20px) scaleX(1.8); }
+	.pot-stage.state-burnt {
+		background: linear-gradient(180deg, rgba(196, 53, 30, 0.04), transparent 70%);
 	}
 
-	/* Flame flicker */
-	.flame-flicker {
-		animation: flicker 0.18s steps(2) infinite;
+	.pot-stage.state-cooked {
+		background: linear-gradient(180deg, rgba(107, 138, 122, 0.08), transparent 70%);
 	}
+
+	.pot-stage-title {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: var(--ink-3);
+		margin-bottom: 4px;
+	}
+
+	.round {
+		color: var(--ink);
+		font-weight: 600;
+	}
+
+	.mood-chip {
+		display: inline-flex;
+		align-items: center;
+		margin-left: 6px;
+		padding: 3px 6px;
+		border-radius: 999px;
+		border: 1px solid var(--line);
+		background: var(--canvas);
+		color: var(--ink);
+		font-size: 9px;
+		letter-spacing: 0.08em;
+	}
+
+	.mood-chip.burnt {
+		border-color: rgba(196, 53, 30, 0.28);
+		background: rgba(196, 53, 30, 0.12);
+		color: var(--alarm);
+	}
+
+	.mood-chip.argued {
+		border-color: rgba(180, 86, 42, 0.28);
+		background: rgba(180, 86, 42, 0.08);
+		color: var(--copper-3);
+	}
+
+	.mood-chip.simmer,
+	.mood-chip.simmer-high {
+		border-color: rgba(180, 86, 42, 0.22);
+		background: rgba(201, 113, 66, 0.08);
+		color: var(--copper-3);
+	}
+
+	.mood-chip.cooked {
+		border-color: rgba(107, 138, 122, 0.28);
+		background: rgba(107, 138, 122, 0.12);
+		color: var(--cool);
+	}
+
+	.pot-wrap {
+		position: relative;
+		height: 210px;
+		display: grid;
+		place-items: end center;
+		overflow: hidden;
+	}
+
+	.pot-svg {
+		image-rendering: pixelated;
+		image-rendering: -moz-crisp-edges;
+		shape-rendering: crispEdges;
+		width: 220px;
+		height: auto;
+		z-index: 2;
+	}
+
+	.steam,
+	.smoke,
+	.spark,
+	.sparkle,
+	.cooked-halo,
+	.heat-glow {
+		position: absolute;
+	}
+
+	.steam {
+		left: 50%;
+		bottom: 150px;
+		width: 10px;
+		height: 10px;
+		background: var(--steam);
+		border-radius: 50%;
+		opacity: 0;
+		animation: rise 2.6s infinite ease-out;
+		box-shadow: inset -2px -2px 0 rgba(0, 0, 0, 0.04);
+		z-index: 1;
+	}
+
+	.steam.fast {
+		animation-duration: 1.2s;
+	}
+
+	.s2 {
+		animation-delay: 0.6s;
+	}
+
+	.s3 {
+		animation-delay: 1.2s;
+		width: 8px;
+		height: 8px;
+	}
+
+	.s4 {
+		animation-delay: 1.8s;
+		width: 12px;
+		height: 12px;
+	}
+
+	.s5 {
+		animation-delay: 0.3s;
+		width: 7px;
+		height: 7px;
+	}
+
+	.smoke {
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: rgba(26, 22, 19, 0.45);
+		filter: blur(2px);
+		opacity: 0;
+		animation: smoke-rise 3.2s infinite ease-out;
+	}
+
+	.spark {
+		width: 5px;
+		height: 5px;
+		background: linear-gradient(180deg, #ffbb66, #c4351e);
+		clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+		animation: spark-fly 1.4s linear infinite;
+	}
+
+	.sparkle {
+		width: 12px;
+		height: 12px;
+		opacity: 0;
+		animation: sparkle-twinkle 2.4s infinite ease-in-out;
+	}
+
+	.sparkle::before,
+	.sparkle::after {
+		content: '';
+		position: absolute;
+		background: rgba(232, 138, 42, 0.8);
+	}
+
+	.sparkle::before {
+		left: 5px;
+		top: 0;
+		width: 2px;
+		height: 12px;
+	}
+
+	.sparkle::after {
+		left: 0;
+		top: 5px;
+		width: 12px;
+		height: 2px;
+	}
+
+	.sparkle.big {
+		transform: scale(1.2);
+	}
+
+	.cooked-halo {
+		top: 22px;
+		right: 44px;
+		width: 32px;
+		height: 32px;
+		border-radius: 999px;
+		background: rgba(107, 138, 122, 0.18);
+		border: 1px solid rgba(107, 138, 122, 0.35);
+		display: grid;
+		place-items: center;
+		color: var(--cool);
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-weight: 600;
+		animation: pop 0.25s ease-out;
+	}
+
+	.heat-glow {
+		bottom: 10px;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 160px;
+		height: 30px;
+		filter: blur(4px);
+		animation: flicker 1.2s infinite ease-in-out alternate;
+		z-index: 0;
+	}
+
+	.jiggle {
+		animation: jiggle 2.4s infinite;
+		transform-origin: center;
+	}
+
+	@keyframes rise {
+		0% {
+			transform: translate(-50%, 0) scale(0.6);
+			opacity: 0;
+		}
+		15% {
+			opacity: 0.9;
+		}
+		60% {
+			opacity: 0.6;
+		}
+		100% {
+			transform: translate(-50%, -120px) scale(1.8);
+			opacity: 0;
+		}
+	}
+
+	@keyframes smoke-rise {
+		0% {
+			transform: translate(-50%, 0) scale(0.8);
+			opacity: 0;
+		}
+		25% {
+			opacity: 0.5;
+		}
+		100% {
+			transform: translate(-30%, -110px) scale(1.8);
+			opacity: 0;
+		}
+	}
+
+	@keyframes spark-fly {
+		0% {
+			transform: translate(0, 0) rotate(0deg);
+			opacity: 0;
+		}
+		20% {
+			opacity: 1;
+		}
+		100% {
+			transform: translate(var(--sx), -40px) rotate(30deg);
+			opacity: 0;
+		}
+	}
+
 	@keyframes flicker {
-		0%   { opacity: 0.9; }
-		50%  { opacity: 0.3; }
-		100% { opacity: 0.9; }
+		0% {
+			opacity: 0.7;
+			transform: translateX(-50%) scaleY(1);
+		}
+		100% {
+			opacity: 1;
+			transform: translateX(-50%) scaleY(1.15);
+		}
+	}
+
+	@keyframes jiggle {
+		0%,
+		90%,
+		100% {
+			transform: translate(0, 0);
+		}
+		92% {
+			transform: translate(-1px, 0);
+		}
+		94% {
+			transform: translate(1px, -1px);
+		}
+		96% {
+			transform: translate(-1px, 0);
+		}
+		98% {
+			transform: translate(1px, 0);
+		}
+	}
+
+	@keyframes sparkle-twinkle {
+		0%,
+		100% {
+			opacity: 0;
+			transform: scale(0.4) rotate(0deg);
+		}
+		35%,
+		60% {
+			opacity: 1;
+			transform: scale(1) rotate(15deg);
+		}
+	}
+
+	@keyframes pop {
+		from {
+			transform: scale(0);
+		}
+		to {
+			transform: scale(1);
+		}
 	}
 </style>

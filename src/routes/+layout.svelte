@@ -30,10 +30,10 @@
 {#if toasts.length > 0}
 	<div class="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
 		{#each toasts as toast (toast.id)}
-			<div class="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm max-w-sm
-				{toast.type === 'error' ? 'bg-red-950 border-red-800 text-red-200' :
-				 toast.type === 'warning' ? 'bg-yellow-950 border-yellow-800 text-yellow-200' :
-				 'bg-[#1a1a1a] border-[#2a2a2a] text-gray-300'}">
+			<div class="flex max-w-sm items-center gap-2 rounded-[3px] border px-4 py-2.5 text-sm shadow-[0_12px_24px_rgba(26,22,19,0.12)]
+				{toast.type === 'error' ? 'border-[var(--alarm)] bg-[rgba(196,53,30,0.08)] text-[var(--alarm)]' :
+				 toast.type === 'warning' ? 'border-[var(--copper)] bg-[rgba(180,86,42,0.08)] text-[var(--copper-3)]' :
+				 'border-[var(--line)] bg-[var(--canvas)] text-[var(--ink-2)]'}">
 				<span class="flex-1">{toast.message}</span>
 				<button onclick={() => dismissToast(toast.id)} class="text-current opacity-60 hover:opacity-100">×</button>
 			</div>

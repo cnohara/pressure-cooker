@@ -19,42 +19,45 @@
 	}
 </script>
 
-<div class="rounded-xl border border-[#2a2a2a] bg-[#1a1a1a] overflow-hidden">
-	<div class="flex items-center gap-3 px-4 py-3 border-b border-[#2a2a2a]">
-		<span class="text-sm font-semibold text-white">✦ Session Summary</span>
+<div class="pc-card rounded-[3px] overflow-hidden">
+	<div class="flex items-center gap-3 border-b border-[var(--line)] px-5 py-4">
+		<span class="pc-serif text-[22px] text-[var(--ink)]">Session Summary</span>
 		{#if streaming}
-			<span class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
+			<span class="h-2 w-2 animate-pulse rounded-full bg-[var(--copper)]"></span>
 		{/if}
 		<div class="ml-auto flex gap-2">
-			<button
-				onclick={copyAll}
-				class="text-xs text-gray-500 hover:text-white transition-colors"
-				title="Copy summary"
-			>Copy</button>
-			<button
-				onclick={exportMd}
-				class="text-xs text-gray-500 hover:text-white transition-colors"
-				title="Export as Markdown"
-			>Export</button>
+			<button type="button" onclick={copyAll} class="pc-mono text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)] hover:text-[var(--ink)]">Copy</button>
+			<button type="button" onclick={exportMd} class="pc-mono text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)] hover:text-[var(--ink)]">Export</button>
 		</div>
 	</div>
 
-	<div class="px-4 py-3">
+	<div class="px-5 py-4">
 		{#if session.summaryOutput}
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			<div class="prose" aria-live="polite">
-				{@html html}{#if streaming}<span class="inline-block w-0.5 h-4 bg-orange-400 animate-pulse ml-0.5 align-middle"></span>{/if}
+			<div class="pc-prose" aria-live="polite">
+				{@html html}{#if streaming}<span class="stream-caret" aria-hidden="true">▋</span>{/if}
 			</div>
 		{:else}
-			<p class="text-sm text-gray-600 italic">Generating summary…</p>
+			<p class="text-sm italic text-[var(--ink-3)]">Generating summary…</p>
 		{/if}
 	</div>
 
-	{#if session.status === 'complete'}
-		<div class="px-4 py-3 border-t border-[#2a2a2a] text-xs text-gray-500 flex flex-wrap gap-3">
-			<span>Total actual cost: <span class="text-orange-400 font-semibold">${session.totalActualCost.toFixed(4)}</span></span>
-			<span>Rounds: {session.rounds.length}</span>
-			<span>Models: {session.llm1Model} + {session.llm2Model}</span>
-		</div>
-	{/if}
+	<div class="pc-mono flex flex-wrap gap-3 border-t border-[var(--line)] px-5 py-3 text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]">
+		<span>Total cost: ${session.totalActualCost.toFixed(4)}</span>
+		<span>Rounds: {session.rounds.length}</span>
+		<span>{session.llm1Model} + {session.llm2Model}</span>
+	</div>
 </div>
+
+<style>
+	:global(.stream-caret) {
+		color: var(--copper);
+		animation: blink 0.9s step-end infinite;
+	}
+
+	@keyframes blink {
+		50% {
+			opacity: 0;
+		}
+	}
+</style>

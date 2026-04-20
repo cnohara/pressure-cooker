@@ -1,96 +1,194 @@
 <script lang="ts">
 	import ConfigPanel from '$lib/components/ConfigPanel.svelte';
-	import RoundCard from '$lib/components/RoundCard.svelte';
-	import ProgressBar from '$lib/components/ProgressBar.svelte';
+	import FinalOutputCard from '$lib/components/FinalOutputCard.svelte';
+	import RoundTimeline from '$lib/components/RoundTimeline.svelte';
+	import Sidebar from '$lib/components/Sidebar.svelte';
+	import StreamingPanel from '$lib/components/StreamingPanel.svelte';
 	import SummaryCard from '$lib/components/SummaryCard.svelte';
-	import PressureCookerViz from '$lib/components/PressureCookerViz.svelte';
-	import { getSession, stopSession, resetSession } from '$lib/stores/session.svelte';
+	import Topbar from '$lib/components/Topbar.svelte';
+	import { getSession, resetSession, stopSession } from '$lib/stores/session.svelte';
+	import { findModel } from '$lib/stores/models.svelte';
 
 	const session = $derived(getSession());
-	const isRunning = $derived(session?.status === 'running' || session?.status === 'paused');
-	const isComplete = $derived(session?.status === 'complete' || session?.status === 'stopped');
-	const convergenceScores = $derived(session?.rounds.map((r) => r.convergenceScore) ?? []);
+	const isComplete = $derived(session?.status === 'complete' || session?.status === 'stopped' || session?.status === 'error');
+	const totalTokens = $derived.by(() =>
+		session?.rounds.reduce((sum, round) => sum + round.builderTokensUsed + round.criticTokensUsed, 0) ?? 0
+	);
+	const spent = $derived.by(() =>
+		session?.rounds.reduce((sum, round) => sum + round.actualCost, 0) ?? session?.totalActualCost ?? 0
+	);
+	let now = $state(Date.now());
+	let autoFollowLatest = $state(true);
+
+	let selectedRoundNumber = $state<number | null>(null);
+
+	$effect(() => {
+		if (!session?.rounds.length) {
+			selectedRoundNumber = null;
+			autoFollowLatest = true;
+			return;
+		}
+
+		const lastRound = session.rounds[session.rounds.length - 1].roundNumber;
+		const existing = selectedRoundNumber
+			? session.rounds.find((round) => round.roundNumber === selectedRoundNumber)
+			: null;
+
+		if (!existing || autoFollowLatest) selectedRoundNumber = lastRound;
+	});
+
+	const selectedRound = $derived.by(() => {
+		if (!session?.rounds.length) return null;
+		return (
+			session.rounds.find((round) => round.roundNumber === selectedRoundNumber) ??
+			session.rounds[session.rounds.length - 1]
+		);
+	});
+
+	const currentRoundNumber = $derived.by(() => session?.rounds[session.rounds.length - 1]?.roundNumber ?? 1);
+	const builderModelName = $derived.by(() => (session ? findModel(session.llm1Model)?.name ?? session.llm1Model : ''));
+	const criticModelName = $derived.by(() => (session ? findModel(session.llm2Model)?.name ?? session.llm2Model : ''));
+	const elapsedSec = $derived.by(() => {
+		if (!session?.startedAt) return 0;
+		return Math.max(0, Math.floor((now - new Date(session.startedAt).getTime()) / 1000));
+	});
+
+	$effect(() => {
+		if (!session) return;
+		now = Date.now();
+		const timer = setInterval(() => {
+			now = Date.now();
+		}, 1000);
+		return () => clearInterval(timer);
+	});
+
+	function handleStopOrReset() {
+		if (!session) return;
+		if (session.status === 'complete' || session.status === 'stopped' || session.status === 'error') {
+			resetSession();
+			autoFollowLatest = true;
+			return;
+		}
+		stopSession();
+	}
+
+	function handleSelectRound(round: number) {
+		selectedRoundNumber = round;
+		const latestRound = session?.rounds[session.rounds.length - 1]?.roundNumber ?? round;
+		autoFollowLatest = round === latestRound;
+	}
+
+	function builderStatusLabel() {
+		if (!selectedRound) return 'Waiting';
+		if (selectedRound.status === 'builder_streaming') return 'Streaming';
+		if (!selectedRound.builderOutput) return 'Waiting';
+		return 'Delivered';
+	}
+
+	function criticStatusLabel() {
+		if (!selectedRound) return 'Waiting';
+		if (selectedRound.status === 'critic_streaming') return 'Streaming';
+		if (!selectedRound.criticOutput) return selectedRound.status === 'builder_streaming' ? 'Waiting' : 'Queued';
+		return 'Delivered';
+	}
+
+	const finalRound = $derived.by(() => session?.rounds.at(-1) ?? null);
 </script>
 
-<div class="max-w-[860px] mx-auto px-4 py-8 space-y-6">
-
-	<!-- Config Panel -->
-	<ConfigPanel collapsed={!!session && !isComplete} onstarted={() => {}} />
-
-	<!-- "New session" button when complete -->
-	{#if isComplete}
-		<div class="flex justify-center">
-			<button
-				onclick={resetSession}
-				class="text-sm text-gray-500 hover:text-orange-400 transition-colors border border-[#2a2a2a] rounded-lg px-4 py-2"
-			>
-				+ New Session
-			</button>
+{#if !session}
+	<div class="mx-auto max-w-[1180px] px-6 py-8">
+		<div class="mb-8">
+			<ConfigPanel collapsed={false} onstarted={() => {}} />
 		</div>
-	{/if}
+	</div>
+{:else}
+	<div class="px-6 py-6">
+		<div class="mx-auto flex max-w-[1440px] gap-0 max-[1180px]:flex-col">
+			<Sidebar
+				rounds={session.rounds}
+				totalRounds={session.totalRounds}
+				currentRound={currentRoundNumber}
+				sessionStatus={session.status}
+				tokens={totalTokens}
+				spentUsd={spent}
+				elapsedSec={elapsedSec}
+				sessionId={session.id}
+				startedAt={session.startedAt}
+				onStop={handleStopOrReset}
+				onSelectRound={handleSelectRound}
+			/>
 
-	{#if session}
-		<!-- Progress + Viz row -->
-		{#if isRunning || isComplete}
-			<div class="flex items-start gap-6">
-				<!-- Left: progress + stop -->
-				<div class="flex-1 space-y-3 pt-2">
-					{#if isRunning}
-						<ProgressBar
-							current={session.rounds.length}
-							total={session.totalRounds}
-							startedAt={session.startedAt}
-						/>
-						<div class="flex justify-end">
-							<button
-								onclick={stopSession}
-								class="bg-red-900 hover:bg-red-800 text-red-200 rounded-lg px-4 py-2 text-sm transition-all"
-							>
-								■ Stop
-							</button>
-						</div>
-					{/if}
-
-					<!-- Status messages -->
-					{#if session.status === 'stopped'}
-						<p class="text-sm text-yellow-500">Session stopped. Partial output saved to history.</p>
-					{:else if session.status === 'error'}
-						<p class="text-sm text-red-400">{session.errorMessage ?? 'An error occurred.'}</p>
-					{:else if session.status === 'complete'}
-						<p class="text-sm text-green-400">✓ Session complete.</p>
-					{/if}
-				</div>
-
-				<!-- Right: pressure cooker viz -->
-				<div class="shrink-0">
-					<PressureCookerViz
-						{convergenceScores}
-						totalRounds={session.totalRounds}
-						sessionStatus={session.status}
-					/>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Round Cards -->
-		<div class="space-y-3">
-			{#each session.rounds as round, i (round.roundNumber)}
-				<RoundCard
-					{round}
+			<div class="min-w-0 flex-1 border border-l-0 border-[var(--line)] bg-[rgba(242,235,222,0.78)] max-[1180px]:border-l max-[1180px]:border-t-0">
+				<Topbar topic={session.topic} builderModel={builderModelName} criticModel={criticModelName} />
+				<RoundTimeline
+					rounds={session.rounds}
 					totalRounds={session.totalRounds}
-					llm1Model={session.llm1Model}
-					llm2Model={session.llm2Model}
-					llm1Instruction={session.llm1Instruction}
-					llm2Instruction={session.llm2Instruction}
-					sessionStatus={session.status}
-					isLast={i === session.rounds.length - 1}
+					selectedRound={selectedRound?.roundNumber ?? 1}
+					onselect={handleSelectRound}
 				/>
-			{/each}
-		</div>
 
-		<!-- Summary Card -->
-		{#if session.summaryEnabled && session.summaryStatus !== 'idle'}
-			<SummaryCard {session} />
-		{/if}
-	{/if}
-</div>
+				{#if session.status === 'error'}
+					<div class="mx-6 mt-6 rounded-[3px] border border-[var(--alarm)] bg-[rgba(196,53,30,0.08)] px-4 py-3 text-sm text-[var(--alarm)]">
+						{session.errorMessage ?? 'An unexpected error occurred.'}
+					</div>
+				{/if}
+
+				{#if selectedRound}
+					<div class="grid h-[620px] gap-px bg-[var(--line)] max-[980px]:h-auto max-[980px]:grid-cols-1 md:grid-cols-2">
+						<div id={`round-${selectedRound.roundNumber}-builder`}>
+							<StreamingPanel
+								role="builder"
+								modelId={builderModelName}
+								content={selectedRound.builderOutput}
+								streaming={selectedRound.status === 'builder_streaming'}
+								waiting={!selectedRound.builderOutput}
+								statusLabel={builderStatusLabel()}
+								tokens={selectedRound.builderTokensUsed}
+								cost={selectedRound.actualCost}
+							/>
+						</div>
+						<div id={`round-${selectedRound.roundNumber}-critic`}>
+							<StreamingPanel
+								role="critic"
+								modelId={criticModelName}
+								content={selectedRound.criticOutput}
+								streaming={selectedRound.status === 'critic_streaming'}
+								waiting={!selectedRound.criticOutput}
+								statusLabel={criticStatusLabel()}
+								tokens={selectedRound.criticTokensUsed}
+								cost={selectedRound.actualCost}
+							/>
+						</div>
+					</div>
+				{/if}
+
+				{#if isComplete && finalRound}
+					<div class="border-t border-[var(--line)] px-6 py-6">
+						<div class={`grid gap-6 ${session.summaryEnabled && session.summaryStatus !== 'idle' ? 'xl:grid-cols-2' : 'grid-cols-1'}`}>
+							<FinalOutputCard
+								title="Final Builder Output"
+								content={finalRound.builderOutput}
+								modelId={builderModelName}
+							/>
+							{#if session.summaryEnabled && session.summaryStatus !== 'idle'}
+								<SummaryCard {session} />
+							{/if}
+						</div>
+					</div>
+				{/if}
+
+				{#if isComplete}
+					<div class="border-t border-[var(--line)] px-6 py-5">
+						<button
+							type="button"
+							onclick={resetSession}
+							class="pc-mono rounded-[2px] border border-[var(--line)] bg-[var(--canvas)] px-4 py-3 text-[11px] uppercase tracking-[0.1em] text-[var(--ink)] transition-colors hover:border-[var(--copper)]"
+						>
+							New session
+						</button>
+					</div>
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}

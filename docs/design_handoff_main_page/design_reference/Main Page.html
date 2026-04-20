@@ -1,0 +1,2027 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>PressureCooker — Session</title>
+<meta name="viewport" content="width=1440, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --canvas: #F2EBDE;        /* warm off-white */
+    --canvas-2: #E8DFCD;      /* paper shadow */
+    --ink: #1A1613;           /* deep ink */
+    --ink-2: #4A3F35;         /* warm gray */
+    --ink-3: #8A7A68;         /* muted */
+    --line: #D4C7AE;          /* paper rule */
+    --line-2: #C4B497;
+    --copper: #B4562A;        /* accent — copper/rust */
+    --copper-2: #C97142;
+    --copper-3: #7A3A1C;      /* dark copper */
+    --steam: #EDE3D0;
+    --alarm: #C4351E;         /* pressure red */
+    --ember: #E88A2A;         /* heat orange */
+    --cool: #6B8A7A;          /* low-pressure green */
+    --builder-tag: #3E5B46;
+    --critic-tag: #7A3A1C;
+    --grid: #E1D5BA;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(26,22,19,0.05) 1px, transparent 0);
+    background-size: 20px 20px;
+  }
+
+  .serif { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; letter-spacing: -0.01em; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  /* ============ APP SHELL ============ */
+  .app {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    min-height: 100vh;
+  }
+
+  /* ============ SIDEBAR ============ */
+  .sidebar {
+    background: #EBE1CC;
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .brand {
+    padding: 20px 22px 14px;
+    border-bottom: 1px dashed var(--line-2);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .brand-mark {
+    width: 28px; height: 28px;
+    background: var(--ink);
+    color: var(--canvas);
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono'; font-weight: 600;
+    font-size: 13px;
+    border-radius: 3px;
+    position: relative;
+  }
+  .brand-mark::after {
+    content: '';
+    position: absolute;
+    top: -3px; left: 50%;
+    transform: translateX(-50%);
+    width: 6px; height: 6px;
+    background: var(--copper);
+    border-radius: 50%;
+  }
+  .brand-name {
+    font-family: 'Instrument Serif';
+    font-size: 22px;
+    letter-spacing: -0.01em;
+  }
+  .brand-name em {
+    font-style: italic;
+    color: var(--copper-3);
+  }
+
+  /* -- POT STAGE -- */
+  .pot-stage {
+    flex: 0 0 auto;
+    padding: 18px 22px 22px;
+    border-bottom: 1px dashed var(--line-2);
+    position: relative;
+    background:
+      linear-gradient(180deg, transparent 0%, rgba(180,86,42,0.03) 100%);
+  }
+  .pot-stage-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+    margin-bottom: 4px;
+  }
+  .pot-stage-title .round {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .pot-wrap {
+    position: relative;
+    height: 210px;
+    display: grid;
+    place-items: end center;
+    overflow: hidden;
+  }
+  .pot-svg {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    shape-rendering: crispEdges;
+    width: 220px;
+    height: auto;
+  }
+
+  /* steam */
+  .steam {
+    position: absolute;
+    left: 50%;
+    bottom: 150px;
+    width: 10px; height: 10px;
+    background: var(--steam);
+    border-radius: 50%;
+    opacity: 0;
+    animation: rise 2.6s infinite ease-out;
+    box-shadow: inset -2px -2px 0 rgba(0,0,0,0.04);
+  }
+  .steam.s2 { animation-delay: 0.6s; left: calc(50% - 14px); }
+  .steam.s3 { animation-delay: 1.2s; left: calc(50% + 10px); width: 8px; height: 8px;}
+  .steam.s4 { animation-delay: 1.8s; left: calc(50% - 4px); width: 12px; height: 12px;}
+  .steam.s5 { animation-delay: 0.3s; left: calc(50% + 18px); width: 7px; height: 7px;}
+
+  @keyframes rise {
+    0%   { transform: translate(-50%, 0) scale(0.6); opacity: 0; }
+    15%  { opacity: 0.9; }
+    60%  { opacity: 0.6; }
+    100% { transform: translate(-50%, -120px) scale(1.8); opacity: 0; }
+  }
+
+  /* heat glow under pot */
+  .heat-glow {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 160px;
+    height: 30px;
+    background: radial-gradient(ellipse at center, rgba(232,138,42,0.55) 0%, transparent 70%);
+    filter: blur(4px);
+    animation: flicker 1.2s infinite ease-in-out alternate;
+  }
+  @keyframes flicker {
+    0%   { opacity: 0.7; transform: translateX(-50%) scaleY(1); }
+    100% { opacity: 1.0; transform: translateX(-50%) scaleY(1.15); }
+  }
+
+  /* jiggle animation for pot lid bits */
+  @keyframes jiggle {
+    0%, 90%, 100% { transform: translate(0, 0); }
+    92% { transform: translate(-1px, 0); }
+    94% { transform: translate(1px, -1px); }
+    96% { transform: translate(-1px, 0); }
+    98% { transform: translate(1px, 0); }
+  }
+  .jiggle { animation: jiggle 2.4s infinite; transform-origin: center; }
+
+  /* ============ READOUTS ============ */
+  .readouts {
+    padding: 16px 22px;
+    border-bottom: 1px dashed var(--line-2);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .readout-label {
+    font-family: 'JetBrains Mono';
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+    margin-bottom: 4px;
+  }
+  .readout-value {
+    font-family: 'Instrument Serif';
+    font-size: 34px;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .readout-value .unit {
+    font-family: 'JetBrains Mono';
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-left: 2px;
+    font-weight: 500;
+  }
+
+  /* ============ GAUGE (convergence bar) ============ */
+  .gauge {
+    padding: 16px 22px;
+    border-bottom: 1px dashed var(--line-2);
+  }
+  .gauge-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .gauge-title {
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+  }
+  .gauge-score {
+    font-family: 'Instrument Serif';
+    font-size: 20px;
+    color: var(--ink);
+  }
+  .gauge-track {
+    height: 10px;
+    background: var(--canvas-2);
+    border: 1px solid var(--line-2);
+    position: relative;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .gauge-fill {
+    position: absolute; top: 0; left: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      45deg,
+      var(--copper) 0 4px,
+      var(--copper-2) 4px 8px
+    );
+    border-right: 1px solid var(--copper-3);
+  }
+  .gauge-ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-family: 'JetBrains Mono';
+    font-size: 9px;
+    color: var(--ink-3);
+  }
+  .gauge-trail {
+    display: flex;
+    gap: 4px;
+    margin-top: 10px;
+    align-items: flex-end;
+    height: 28px;
+  }
+  .trail-dot {
+    flex: 1;
+    background: var(--copper);
+    border: 1px solid var(--copper-3);
+    min-height: 2px;
+    position: relative;
+  }
+  .trail-dot.pending { background: transparent; border: 1px dashed var(--line-2); }
+  .trail-dot.active { background: var(--copper-2); }
+  .trail-dot::after {
+    content: attr(data-n);
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 2px;
+    font-family: 'JetBrains Mono';
+    font-size: 8px;
+    color: var(--ink-3);
+  }
+
+  /* ============ BOTTOM CONTROLS ============ */
+  .sidebar-foot {
+    padding: 14px 22px 20px;
+    border-top: 1px dashed var(--line-2);
+    background: #E4D9C0;
+  }
+  .btn-stop {
+    width: 100%;
+    padding: 11px;
+    background: var(--ink);
+    color: var(--canvas);
+    border: 1px solid var(--ink);
+    font-family: 'JetBrains Mono';
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-stop::before {
+    content: '';
+    width: 8px; height: 8px;
+    background: var(--alarm);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(196,53,30,0.2);
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(196,53,30,0.5); }
+    50% { box-shadow: 0 0 0 5px rgba(196,53,30,0); }
+  }
+
+  /* ============ MAIN ============ */
+  .main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* top strip */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 28px;
+    border-bottom: 1px solid var(--line);
+    background: var(--canvas);
+  }
+  .topic-chip {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .topic-chip .kicker {
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+  }
+  .topic-chip .topic {
+    font-family: 'Instrument Serif';
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .topbar-actions {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .model-chip {
+    font-family: 'JetBrains Mono';
+    font-size: 11px;
+    padding: 5px 9px;
+    background: var(--canvas-2);
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    color: var(--ink-2);
+  }
+  .model-chip .role { color: var(--ink-3); margin-right: 6px; }
+  .model-chip.builder { border-left: 3px solid var(--builder-tag); }
+  .model-chip.critic { border-left: 3px solid var(--critic-tag); }
+
+  .icon-btn {
+    width: 32px; height: 32px;
+    border: 1px solid var(--line-2);
+    background: var(--canvas);
+    border-radius: 2px;
+    display: grid; place-items: center;
+    cursor: pointer;
+    color: var(--ink-2);
+  }
+  .icon-btn:hover { background: var(--canvas-2); }
+
+  /* ============ TIMELINE / ROUND STEPPER ============ */
+  .timeline {
+    padding: 14px 28px;
+    border-bottom: 1px dashed var(--line);
+    background:
+      linear-gradient(180deg, rgba(180,86,42,0.02), transparent);
+  }
+  .timeline-rail {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    position: relative;
+  }
+  .round-pill {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--line-2);
+    background: var(--canvas);
+    position: relative;
+    min-width: 0;
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .round-pill + .round-pill { border-left: none; }
+  .round-pill:first-child { border-top-left-radius: 3px; border-bottom-left-radius: 3px; }
+  .round-pill:last-child { border-top-right-radius: 3px; border-bottom-right-radius: 3px; }
+  .round-pill.done { background: #E6DBC3; }
+  .round-pill.active {
+    background: var(--ink);
+    color: var(--canvas);
+    border-color: var(--ink);
+    box-shadow: 0 2px 0 var(--copper-3);
+  }
+  .round-pill.pending { color: var(--ink-3); border-style: dashed; }
+  .round-pill .n {
+    font-family: 'Instrument Serif';
+    font-size: 22px;
+    line-height: 1;
+  }
+  .round-pill .meta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .round-pill .meta .lbl { opacity: 0.7; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .round-pill .meta .val { font-weight: 600; }
+  .round-pill.active .meta .lbl { color: #E8DCBF; }
+  .round-pill.active::after {
+    content: '';
+    position: absolute;
+    bottom: -9px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 10px; height: 10px;
+    background: var(--ink);
+  }
+  .round-pill .score-chip {
+    margin-left: auto;
+    font-size: 10px;
+    padding: 2px 5px;
+    background: var(--copper);
+    color: white;
+    border-radius: 2px;
+  }
+  .round-pill.active .score-chip { background: var(--copper-2); }
+
+  /* ============ STREAMS ============ */
+  .streams {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    min-height: 0;
+  }
+  .stream {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid var(--line);
+  }
+  .stream:last-child { border-right: none; }
+
+  .stream-head {
+    padding: 14px 24px 12px;
+    border-bottom: 1px dashed var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .stream-role {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .role-badge {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono';
+    font-weight: 600;
+    font-size: 14px;
+    color: white;
+  }
+  .role-badge.builder {
+    background: var(--builder-tag);
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15);
+  }
+  .role-badge.critic {
+    background: var(--critic-tag);
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,0.2);
+  }
+  .role-name {
+    font-family: 'Instrument Serif';
+    font-size: 22px;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .role-sub {
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    color: var(--ink-3);
+    margin-top: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .role-status {
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 4px 8px;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .role-status.done { background: var(--canvas-2); color: var(--ink-2); }
+  .role-status.done::before {
+    content: '✓'; font-weight: 600;
+  }
+  .role-status.streaming {
+    background: var(--ink);
+    color: var(--canvas);
+  }
+  .role-status.streaming::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: var(--copper-2);
+    border-radius: 50%;
+    animation: pulse-dot 1s infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .role-status.waiting { background: var(--canvas-2); color: var(--ink-3); }
+
+  .stream-body {
+    padding: 20px 24px 24px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--ink);
+    overflow-y: auto;
+    flex: 1;
+  }
+  .stream-body h3 {
+    font-family: 'Instrument Serif';
+    font-size: 18px;
+    margin: 18px 0 6px;
+    font-weight: 400;
+    color: var(--ink);
+  }
+  .stream-body h3:first-child { margin-top: 0; }
+  .stream-body p { margin: 0 0 10px; }
+  .stream-body ul, .stream-body ol {
+    padding-left: 20px;
+    margin: 0 0 10px;
+  }
+  .stream-body li { margin-bottom: 4px; }
+  .stream-body code {
+    font-family: 'JetBrains Mono';
+    font-size: 12px;
+    background: var(--canvas-2);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+  .stream-body blockquote {
+    margin: 10px 0;
+    padding: 8px 14px;
+    border-left: 3px solid var(--copper);
+    background: rgba(180,86,42,0.06);
+    font-style: italic;
+    color: var(--ink-2);
+  }
+  .stream-body strong { font-weight: 600; }
+
+  /* caret for streaming panel */
+  .caret::after {
+    content: '▋';
+    color: var(--copper);
+    animation: blink 0.9s infinite step-end;
+    margin-left: 1px;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .stream-foot {
+    border-top: 1px dashed var(--line);
+    padding: 10px 24px;
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    color: var(--ink-3);
+    background: rgba(232,223,205,0.4);
+  }
+
+  /* ============ TWEAKS PANEL ============ */
+  .tweaks {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 280px;
+    background: var(--ink);
+    color: var(--canvas);
+    border-radius: 3px;
+    padding: 0;
+    font-family: 'JetBrains Mono';
+    font-size: 11px;
+    box-shadow: 0 8px 24px rgba(26,22,19,0.25), 0 2px 0 var(--copper-3);
+    z-index: 1000;
+    display: none;
+  }
+  .tweaks.visible { display: block; }
+  .tweaks-head {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(242,235,222,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 10px;
+  }
+  .tweaks-head::before { content: '◈'; color: var(--copper-2); margin-right: 6px; }
+  .tweaks-body { padding: 12px 14px 16px; }
+  .tweak {
+    margin-bottom: 12px;
+  }
+  .tweak:last-child { margin-bottom: 0; }
+  .tweak label {
+    display: block;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    opacity: 0.7;
+    margin-bottom: 6px;
+  }
+  .tweak-options {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .tweak-opt {
+    padding: 5px 9px;
+    background: transparent;
+    border: 1px solid rgba(242,235,222,0.25);
+    color: var(--canvas);
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    cursor: pointer;
+    border-radius: 2px;
+  }
+  .tweak-opt.active {
+    background: var(--copper);
+    border-color: var(--copper);
+  }
+  .tweak-opt:hover:not(.active) { background: rgba(242,235,222,0.08); }
+  .tweak-swatch {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+  }
+  .tweak-swatch.active { border-color: var(--canvas); }
+
+  /* mood chip */
+  .mood-chip {
+    display: inline-block;
+    margin-left: 6px;
+    font-family: 'JetBrains Mono';
+    font-size: 9px;
+    padding: 2px 6px;
+    background: var(--copper);
+    color: #fff;
+    border-radius: 2px;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    vertical-align: 1px;
+  }
+  .mood-chip.burnt { background: #2A1A12; color: #E88A2A; }
+  .mood-chip.argued { background: var(--alarm); }
+  .mood-chip.simmer { background: var(--copper); }
+  .mood-chip.simmer-high { background: var(--copper-2); color: #1A1613; }
+  .mood-chip.cooked { background: var(--cool); }
+
+  /* sparkles — near-converged + converged state */
+  .sparkle {
+    position: absolute;
+    width: 8px; height: 8px;
+    opacity: 0;
+    animation: sparkle-twinkle 2.4s infinite ease-in-out;
+    pointer-events: none;
+  }
+  .sparkle.big { width: 12px; height: 12px; }
+  .sparkle::before, .sparkle::after {
+    content: '';
+    position: absolute;
+    background: #FEE8B0;
+    box-shadow: 0 0 6px #FEE8B0, 0 0 12px rgba(254,232,176,0.6);
+  }
+  .sparkle::before {
+    top: 0; left: 50%;
+    width: 2px; height: 100%;
+    transform: translateX(-50%);
+    border-radius: 1px;
+  }
+  .sparkle::after {
+    top: 50%; left: 0;
+    width: 100%; height: 2px;
+    transform: translateY(-50%);
+    border-radius: 1px;
+  }
+  @keyframes sparkle-twinkle {
+    0%, 100% { opacity: 0; transform: scale(0.3) rotate(0deg); }
+    40%      { opacity: 1; transform: scale(1) rotate(45deg); }
+    60%      { opacity: 1; transform: scale(1.1) rotate(90deg); }
+    80%      { opacity: 0; transform: scale(0.5) rotate(135deg); }
+  }
+
+  /* pot stage tinting based on state */
+  .pot-stage.state-burnt {
+    background: linear-gradient(180deg, rgba(42,26,18,0.12), rgba(196,53,30,0.08));
+  }
+  .pot-stage.state-cooked {
+    background: linear-gradient(180deg, rgba(107,138,122,0.12), transparent);
+  }
+
+  /* smoke (burnt state) */
+  .smoke {
+    position: absolute;
+    left: 50%;
+    width: 14px; height: 14px;
+    background: #3A3230;
+    border-radius: 50%;
+    opacity: 0;
+    filter: blur(1px);
+    animation: smoke-rise 2.2s infinite ease-out;
+    box-shadow: inset 2px 2px 0 rgba(0,0,0,0.3);
+  }
+  @keyframes smoke-rise {
+    0%   { transform: translate(-50%, 0) scale(0.5); opacity: 0; }
+    20%  { opacity: 0.55; }
+    80%  { opacity: 0.35; }
+    100% { transform: translate(calc(-50% + 14px), -130px) scale(2.2); opacity: 0; }
+  }
+
+  /* ember sparks for burnt */
+  .spark {
+    position: absolute;
+    width: 3px; height: 3px;
+    background: var(--alarm);
+    box-shadow: 0 0 4px var(--ember);
+    opacity: 0;
+    animation: spark-fly 1.4s infinite ease-out;
+  }
+  @keyframes spark-fly {
+    0%   { transform: translate(0, 0); opacity: 0; }
+    20%  { opacity: 1; }
+    100% { transform: translate(var(--sx, 20px), -50px); opacity: 0; }
+  }
+
+  /* cooked checkmark halo */
+  .cooked-halo {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    width: 26px; height: 26px;
+    background: var(--cool);
+    color: white;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-family: 'JetBrains Mono';
+    font-size: 14px;
+    font-weight: 700;
+    box-shadow: 0 0 0 3px rgba(107,138,122,0.25);
+    animation: pop 0.4s ease-out;
+  }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+
+  /* readout tooltip */
+  .has-tip { position: relative; }
+  .info-dot {
+    display: inline-grid;
+    place-items: center;
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    background: var(--ink-3);
+    color: var(--canvas);
+    font-size: 8px;
+    font-weight: 700;
+    cursor: help;
+    margin-left: 3px;
+    vertical-align: 1px;
+  }
+  .info-dot:hover { background: var(--ink); }
+  .info-dot::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    width: 240px;
+    padding: 8px 10px;
+    background: var(--ink);
+    color: var(--canvas);
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    line-height: 1.4;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    border-radius: 3px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .info-dot:hover::after { opacity: 1; }
+
+  /* credits widget */
+  .credits {
+    padding: 14px 22px;
+    border-bottom: 1px dashed var(--line-2);
+    background: linear-gradient(180deg, transparent, rgba(180,86,42,0.04));
+  }
+  .credits-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .credits-label {
+    font-family: 'JetBrains Mono';
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+  }
+  .credits-amt {
+    font-family: 'Instrument Serif';
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .credits-bar {
+    height: 6px;
+    background: var(--canvas-2);
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .credits-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--copper-3), var(--copper-2));
+  }
+  .credits-row {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .credits-meta {
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    color: var(--ink-3);
+  }
+  .btn-topup {
+    padding: 5px 10px;
+    background: var(--copper);
+    color: white;
+    border: 1px solid var(--copper-3);
+    border-bottom-width: 2px;
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .btn-topup span { transition: transform 0.15s; }
+  .btn-topup:hover span { transform: translateX(2px); }
+  .btn-topup:hover { background: var(--copper-2); }
+
+  /* ============ VIBE (How it's going) ============ */
+  .vibe {
+    padding: 16px 22px;
+    border-bottom: 1px dashed var(--line-2);
+  }
+  .vibe-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .vibe-title {
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+  }
+  .vibe-verdict {
+    font-family: 'Instrument Serif';
+    font-size: 20px;
+    color: var(--ink);
+    line-height: 1.15;
+    font-style: italic;
+  }
+  .vibe-sub {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    color: var(--ink-2);
+    line-height: 1.45;
+    margin-bottom: 12px;
+  }
+  .spark-wrap {
+    background: var(--canvas-2);
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    padding: 8px 8px 4px;
+    margin-bottom: 12px;
+  }
+  .spark-svg {
+    width: 100%;
+    height: 70px;
+    display: block;
+  }
+  .spark-dot {
+    stroke: var(--copper-3);
+    stroke-width: 1.2;
+  }
+  .spark-dot.done { fill: var(--copper); }
+  .spark-dot.active { fill: var(--ink); stroke: var(--copper); stroke-width: 2; }
+  .spark-dot.pending { fill: var(--canvas); stroke-dasharray: 2 2; }
+  .spark-axis {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono';
+    font-size: 9px;
+    color: var(--ink-3);
+    padding: 0 2px;
+  }
+
+  .round-chips {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .rchip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 4px 4px;
+    background: var(--canvas);
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  .rchip:hover { transform: translateY(-1px); }
+  .rchip.current {
+    background: var(--ink);
+    border-color: var(--ink);
+    box-shadow: 0 2px 0 var(--copper-3);
+  }
+  .rchip.pending { border-style: dashed; opacity: 0.55; }
+  .rchip .ri {
+    font-size: 16px;
+    line-height: 1;
+    font-family: 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
+  }
+  .rchip.pending .ri { color: var(--ink-3); font-family: 'JetBrains Mono'; font-size: 14px; }
+  .rchip .rn {
+    font-family: 'JetBrains Mono';
+    font-size: 9px;
+    color: var(--ink-3);
+  }
+  .rchip.current .rn { color: #E8DCBF; }
+  .chip-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    font-family: 'JetBrains Mono';
+    font-size: 9px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .chip-legend .lg { font-family: 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif; margin-right: 2px; }
+
+  /* ============ DETAILS TRAY ============ */
+  .details {
+    margin-top: auto;
+    border-top: 1px dashed var(--line-2);
+    background: #E4D9C0;
+  }
+  .details-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 22px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: 'JetBrains Mono';
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-2);
+  }
+  .details-toggle:hover { background: rgba(26,22,19,0.04); }
+  .details-label { flex: 1; text-align: left; }
+  .details-bal {
+    font-family: 'Instrument Serif';
+    font-size: 14px;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--ink);
+  }
+  .details-chev {
+    font-size: 12px;
+    transition: transform 0.2s;
+  }
+  .details.open .details-chev { transform: rotate(180deg); }
+  .details-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+  .details.open .details-body {
+    max-height: 400px;
+  }
+  .details-stats {
+    padding: 8px 22px 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    border-bottom: 1px dashed var(--line-2);
+  }
+  .credits-inline {
+    padding: 14px 22px;
+    border-bottom: 1px dashed var(--line-2);
+  }
+  .session-id {
+    padding: 10px 22px;
+    font-family: 'JetBrains Mono';
+    font-size: 9px;
+    color: var(--ink-3);
+    letter-spacing: 0.05em;
+  }
+
+  /* scrollbar */
+  .stream-body::-webkit-scrollbar { width: 6px; }
+  .stream-body::-webkit-scrollbar-track { background: transparent; }
+  .stream-body::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+
+</style>
+</head>
+<body>
+
+<div class="app" data-screen-label="01 Main Session">
+
+  <!-- ======================= SIDEBAR ======================= -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">P</div>
+      <div class="brand-name">Pressure<em>Cooker</em></div>
+    </div>
+
+    <!-- POT STAGE -->
+    <div class="pot-stage" id="potStage">
+      <div class="pot-stage-title">
+        <span>Pot <span class="mood-chip" id="moodChip">simmering nicely</span></span>
+        <span class="round">Round 03 / 05</span>
+      </div>
+      <div class="pot-wrap" id="potWrap">
+        <!-- pot + steam injected by JS based on variation -->
+      </div>
+    </div>
+
+    <!-- HOW IT'S GOING -->
+    <div class="vibe">
+      <div class="vibe-head">
+        <span class="vibe-title">How it's going</span>
+        <span class="vibe-verdict" id="vibeVerdict">They're getting closer</span>
+      </div>
+      <div class="vibe-sub" id="vibeSub">Agreement climbed steadily across 3 rounds.</div>
+
+      <!-- agreement sparkline -->
+      <div class="spark-wrap">
+        <svg class="spark-svg" viewBox="0 0 240 70" preserveAspectRatio="none" id="sparkSvg">
+          <!-- grid lines -->
+          <line x1="0" y1="10" x2="240" y2="10" stroke="var(--line-2)" stroke-dasharray="2 3" stroke-width="0.5"/>
+          <line x1="0" y1="35" x2="240" y2="35" stroke="var(--line-2)" stroke-dasharray="2 3" stroke-width="0.5"/>
+          <line x1="0" y1="60" x2="240" y2="60" stroke="var(--line-2)" stroke-dasharray="2 3" stroke-width="0.5"/>
+          <!-- line -->
+          <polyline id="sparkLine" fill="none" stroke="var(--copper)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points=""/>
+          <!-- fill under line -->
+          <polygon id="sparkFill" fill="url(#sparkGrad)" opacity="0.25" points=""/>
+          <defs>
+            <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--copper)"/>
+              <stop offset="100%" stop-color="var(--copper)" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <!-- dots -->
+          <g id="sparkDots"></g>
+        </svg>
+        <div class="spark-axis">
+          <span>apart</span>
+          <span>agreed</span>
+        </div>
+      </div>
+
+      <!-- round emoji chips -->
+      <div class="round-chips" id="roundChips">
+        <div class="rchip" data-round="1"><span class="ri">🔥</span><span class="rn">1</span></div>
+        <div class="rchip" data-round="2"><span class="ri">↔</span><span class="rn">2</span></div>
+        <div class="rchip current" data-round="3"><span class="ri">🤝</span><span class="rn">3</span></div>
+        <div class="rchip pending" data-round="4"><span class="ri">·</span><span class="rn">4</span></div>
+        <div class="rchip pending" data-round="5"><span class="ri">·</span><span class="rn">5</span></div>
+      </div>
+      <div class="chip-legend">
+        <span><span class="lg">🔥</span> dispute</span>
+        <span><span class="lg">↔</span> debate</span>
+        <span><span class="lg">🤝</span> agreeing</span>
+        <span><span class="lg">✓</span> done</span>
+      </div>
+    </div>
+
+    <!-- SESSION DETAILS (collapsible) -->
+    <div class="details" id="details">
+      <button class="details-toggle" id="detailsToggle">
+        <span class="details-label">Session details &amp; credits</span>
+        <span class="details-bal">$2.41</span>
+        <span class="details-chev">▾</span>
+      </button>
+      <div class="details-body" id="detailsBody">
+        <div class="details-stats">
+          <div>
+            <div class="readout-label">Tokens</div>
+            <div class="readout-value">38.4<span class="unit">k</span></div>
+          </div>
+          <div>
+            <div class="readout-label">Spent</div>
+            <div class="readout-value">$0.14<span class="unit">usd</span></div>
+          </div>
+          <div>
+            <div class="readout-label">Elapsed</div>
+            <div class="readout-value">4:22<span class="unit">min</span></div>
+          </div>
+          <div class="has-tip">
+            <div class="readout-label">Temp <span class="info-dot" data-tip="LLM sampling temperature — 0 is deterministic, 1.0 is very varied. 0.7 is balanced.">?</span></div>
+            <div class="readout-value">0.7<span class="unit">°</span></div>
+          </div>
+        </div>
+        <div class="credits-inline">
+          <div class="credits-head">
+            <span class="credits-label">Credits on hand</span>
+            <span class="credits-amt">$2.41</span>
+          </div>
+          <div class="credits-bar"><div class="credits-bar-fill" style="width: 38%"></div></div>
+          <div class="credits-row">
+            <span class="credits-meta">~6 more sessions</span>
+            <button class="btn-topup">Top up <span>→</span></button>
+          </div>
+        </div>
+        <div class="session-id">Session 7f3c-aa21 · started 16:22 · apr 20</div>
+      </div>
+    </div>
+
+    <div class="sidebar-foot">
+      <button class="btn-stop">Stop cooking</button>
+    </div>
+  </aside>
+
+  <!-- ======================= MAIN ======================= -->
+  <main class="main">
+
+    <!-- TOP BAR -->
+    <div class="topbar">
+      <div class="topic-chip">
+        <span class="kicker">Topic</span>
+        <span class="topic">Redesigning the onboarding flow for a pressure-cooker app</span>
+      </div>
+      <div class="topbar-actions">
+        <div class="model-chip builder"><span class="role">Builder</span>claude-opus-4</div>
+        <div class="model-chip critic"><span class="role">Critic</span>gpt-5-pro</div>
+        <button class="icon-btn" title="Settings">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M7 1v2M7 11v2M13 7h-2M3 7H1M11.2 2.8l-1.4 1.4M4.2 9.8l-1.4 1.4M11.2 11.2l-1.4-1.4M4.2 4.2L2.8 2.8" stroke="currentColor" stroke-width="1.3"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- TIMELINE -->
+    <div class="timeline">
+      <div class="timeline-rail">
+        <div class="round-pill done">
+          <span class="n">01</span>
+          <div class="meta"><span class="lbl">00:52</span><span class="val">Plan drafted</span></div>
+          <span class="score-chip">28</span>
+        </div>
+        <div class="round-pill done">
+          <span class="n">02</span>
+          <div class="meta"><span class="lbl">01:44</span><span class="val">Refined scope</span></div>
+          <span class="score-chip">51</span>
+        </div>
+        <div class="round-pill active">
+          <span class="n">03</span>
+          <div class="meta"><span class="lbl">streaming</span><span class="val">Critic reviewing</span></div>
+          <span class="score-chip">72</span>
+        </div>
+        <div class="round-pill pending">
+          <span class="n">04</span>
+          <div class="meta"><span class="lbl">queued</span><span class="val">—</span></div>
+        </div>
+        <div class="round-pill pending">
+          <span class="n">05</span>
+          <div class="meta"><span class="lbl">queued</span><span class="val">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STREAMS -->
+    <div class="streams">
+      <!-- BUILDER -->
+      <section class="stream">
+        <div class="stream-head">
+          <div class="stream-role">
+            <div class="role-badge builder">B</div>
+            <div>
+              <div class="role-name">Builder</div>
+              <div class="role-sub">claude-opus-4 · 32k ctx</div>
+            </div>
+          </div>
+          <div class="role-status done">Delivered</div>
+        </div>
+        <div class="stream-body">
+          <h3>Revised onboarding plan — v3</h3>
+          <p>Based on the Critic's feedback from round 02 about decision fatigue in the 7-step flow, I've reorganized around <strong>three pressure zones</strong>: Warm-up, Cook, and Serve.</p>
+
+          <h3>Zone 1 — Warm-up (1 screen)</h3>
+          <ul>
+            <li><strong>Single question:</strong> "What are you hoping to cook up?" with four cards (Plan · Write · Decide · Explore)</li>
+            <li>No API key ask yet. Defer to first run.</li>
+            <li>Skippable via "I know what I'm doing"</li>
+          </ul>
+
+          <h3>Zone 2 — Cook (2 screens)</h3>
+          <p>This is where the metaphor earns its keep. The user sees a <em>live preview</em> of the pot while they configure:</p>
+          <ul>
+            <li>Model pair picker — Builder vs Critic, shown as two burners</li>
+            <li>Rounds slider labelled "how long to cook" (3–10)</li>
+            <li>Convergence threshold as the whistle pressure</li>
+          </ul>
+
+          <blockquote>Design principle: every config control should have a physical analogue on the pot. If a knob doesn't map, we cut it.</blockquote>
+
+          <h3>Zone 3 — Serve</h3>
+          <p>First-run only: after round 1 completes, show a <strong>teardown overlay</strong> explaining what just happened. Subsequent runs skip this.</p>
+
+          <p>Removed from previous draft: the tutorial modal, the model-recommendation wizard, and the cost-preview gate. All three created friction without proportional value.</p>
+        </div>
+        <div class="stream-foot">
+          <span>2,847 tokens · 11.3s</span>
+          <span>$0.041</span>
+        </div>
+      </section>
+
+      <!-- CRITIC -->
+      <section class="stream">
+        <div class="stream-head">
+          <div class="stream-role">
+            <div class="role-badge critic">C</div>
+            <div>
+              <div class="role-name">Critic</div>
+              <div class="role-sub">gpt-5-pro · 128k ctx</div>
+            </div>
+          </div>
+          <div class="role-status streaming">Streaming</div>
+        </div>
+        <div class="stream-body" id="criticBody">
+          <h3>Where this still leaks pressure</h3>
+
+          <p>The three-zone reframe is a real improvement — decision fatigue drops because each screen has a single intent. But I can push back on three points before we call this converged.</p>
+
+          <p><strong>1. The "four cards" in Warm-up re-introduces the exact fatigue you claim to remove.</strong> Asking users to self-classify as Plan / Write / Decide / Explore is the same taxonomy tax as the old flow, just relabeled. Most users won't know which bucket they're in, and picking wrong sets a bad default. Consider: skip this screen entirely and let the topic textbox do the classifying via an embedding pass.</p>
+
+          <p><strong>2. The burner metaphor is cute but inverted.</strong> In a real pressure cooker, both ingredients share one pot — not two burners. If Builder and Critic are the "ingredients," the UI should show them combining, not heating separately. A single pot with two labeled inputs would read cleaner.</p>
+
+          <p><strong>3. The teardown overlay is a tutorial by another name.</strong> You removed the tutorial modal then added a post-round explainer that serves the same role. If the UI is legible, no teardown is needed. If it isn't, fix the UI.</p>
+
+          <h3>What's actually landed</h3>
+          <ul>
+            <li>Deferring the API key ask — good. This was the biggest bounce point in v2.</li>
+            <li>The "how long to cook" slider is a clean metaphor collision. Keep it.</li>
+            <li>Removing the cost-preview gate: correct. Show cost live<span class="caret"></span></li>
+          </ul>
+        </div>
+        <div class="stream-foot">
+          <span>1,204 tokens · streaming…</span>
+          <span>$0.018</span>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+</div>
+
+<!-- ======================= TWEAKS PANEL ======================= -->
+<div class="tweaks" id="tweaks">
+  <div class="tweaks-head">
+    <span>Tweaks</span>
+    <span style="opacity:0.5">esc</span>
+  </div>
+  <div class="tweaks-body">
+    <div class="tweak">
+      <label>Pot variation</label>
+      <div class="tweak-options" data-tweak="pot">
+        <button class="tweak-opt active" data-val="stovetop">Stovetop</button>
+        <button class="tweak-opt" data-val="lab">Lab</button>
+        <button class="tweak-opt" data-val="bubbling">Bubbling</button>
+        <button class="tweak-opt" data-val="jiggler">Jiggler</button>
+      </div>
+    </div>
+    <div class="tweak">
+      <label>Accent</label>
+      <div class="tweak-options" data-tweak="accent">
+        <button class="tweak-swatch active" data-val="copper" style="background:#B4562A"></button>
+        <button class="tweak-swatch" data-val="teal" style="background:#2A7A7A"></button>
+        <button class="tweak-swatch" data-val="plum" style="background:#6B2A5C"></button>
+        <button class="tweak-swatch" data-val="forest" style="background:#3E5B46"></button>
+        <button class="tweak-swatch" data-val="ink" style="background:#1A1613"></button>
+      </div>
+    </div>
+    <div class="tweak">
+      <label>Rounds</label>
+      <div class="tweak-options" data-tweak="rounds">
+        <button class="tweak-opt" data-val="3">3</button>
+        <button class="tweak-opt active" data-val="5">5</button>
+        <button class="tweak-opt" data-val="7">7</button>
+        <button class="tweak-opt" data-val="10">10</button>
+      </div>
+    </div>
+    <div class="tweak">
+      <label>Heat intensity</label>
+      <div class="tweak-options" data-tweak="heat">
+        <button class="tweak-opt" data-val="low">Low</button>
+        <button class="tweak-opt active" data-val="med">Medium</button>
+        <button class="tweak-opt" data-val="high">High</button>
+      </div>
+    </div>
+    <div class="tweak">
+      <label>Preview pot state</label>
+      <div class="tweak-options" data-tweak="moodOverride">
+        <button class="tweak-opt active" data-val="auto">Auto</button>
+        <button class="tweak-opt" data-val="burnt">Burnt</button>
+        <button class="tweak-opt" data-val="argued">Argued</button>
+        <button class="tweak-opt" data-val="simmer">Simmer</button>
+        <button class="tweak-opt" data-val="cooked">Cooked</button>
+      </div>
+    </div>
+    <div class="tweak">
+      <label>Convergence score <span id="convVal" style="opacity:0.7; float:right">72</span></label>
+      <input type="range" min="0" max="100" value="72" id="convSlider" style="width:100%; accent-color: var(--copper);"/>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ TWEAK DEFAULTS ============
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "pot": "jiggler",
+  "accent": "copper",
+  "rounds": "5",
+  "heat": "med",
+  "convergence": 72,
+  "moodOverride": "auto"
+}/*EDITMODE-END*/;
+
+// ============ POT VARIATIONS (pixel-art SVG) ============
+// All pots fit in a ~220 wide stage. Drawn at roughly 88x88 pixel canvas scaled up.
+
+const POTS = {
+  stovetop: () => `
+    <svg class="pot-svg" viewBox="0 0 88 90" xmlns="http://www.w3.org/2000/svg">
+      <!-- stove burner -->
+      <rect x="8" y="78" width="72" height="4" fill="#3A3230"/>
+      <rect x="10" y="82" width="68" height="3" fill="#1A1613"/>
+      <!-- heat coils glow -->
+      <rect x="14" y="76" width="6" height="2" fill="#E88A2A"><animate attributeName="opacity" values="0.5;1;0.5" dur="1.1s" repeatCount="indefinite"/></rect>
+      <rect x="28" y="76" width="6" height="2" fill="#E88A2A"><animate attributeName="opacity" values="1;0.5;1" dur="0.9s" repeatCount="indefinite"/></rect>
+      <rect x="42" y="76" width="6" height="2" fill="#E88A2A"><animate attributeName="opacity" values="0.6;1;0.6" dur="1.3s" repeatCount="indefinite"/></rect>
+      <rect x="56" y="76" width="6" height="2" fill="#E88A2A"><animate attributeName="opacity" values="1;0.7;1" dur="1s" repeatCount="indefinite"/></rect>
+      <rect x="68" y="76" width="6" height="2" fill="#E88A2A"><animate attributeName="opacity" values="0.5;1;0.5" dur="1.2s" repeatCount="indefinite"/></rect>
+
+      <!-- pot body (copper) -->
+      <rect x="12" y="38" width="64" height="40" fill="#B4562A"/>
+      <rect x="12" y="38" width="64" height="4" fill="#C97142"/>
+      <rect x="12" y="72" width="64" height="6" fill="#7A3A1C"/>
+      <!-- pot highlight -->
+      <rect x="16" y="44" width="3" height="26" fill="#D98B5C"/>
+      <rect x="19" y="44" width="2" height="26" fill="#C97142"/>
+      <!-- pot shadow -->
+      <rect x="70" y="44" width="4" height="28" fill="#7A3A1C"/>
+      <!-- rivets -->
+      <rect x="14" y="48" width="3" height="3" fill="#3A1E0E"/>
+      <rect x="71" y="48" width="3" height="3" fill="#3A1E0E"/>
+
+      <!-- handles -->
+      <rect x="4" y="48" width="8" height="4" fill="#3A1E0E"/>
+      <rect x="76" y="48" width="8" height="4" fill="#3A1E0E"/>
+      <rect x="4" y="52" width="2" height="2" fill="#1A1613"/>
+      <rect x="82" y="52" width="2" height="2" fill="#1A1613"/>
+
+      <!-- lid (dome) -->
+      <g class="jiggle">
+        <rect x="10" y="34" width="68" height="4" fill="#3A3230"/>
+        <rect x="12" y="30" width="64" height="4" fill="#4A3F35"/>
+        <rect x="16" y="26" width="56" height="4" fill="#5A4A40"/>
+        <rect x="22" y="22" width="44" height="4" fill="#6A5A50"/>
+        <rect x="16" y="30" width="4" height="3" fill="#2A2220"/>
+        <rect x="18" y="26" width="3" height="2" fill="#2A2220"/>
+        <!-- lid highlight -->
+        <rect x="22" y="26" width="3" height="2" fill="#8A7A68"/>
+        <rect x="26" y="22" width="4" height="2" fill="#8A7A68"/>
+        <!-- knob -->
+        <rect x="40" y="18" width="8" height="4" fill="#3A1E0E"/>
+        <rect x="42" y="14" width="4" height="4" fill="#3A1E0E"/>
+        <rect x="42" y="12" width="4" height="2" fill="#1A1613"/>
+      </g>
+
+      <!-- whistle steam spout (top right of lid) -->
+      <rect x="58" y="22" width="4" height="6" fill="#3A1E0E"/>
+      <rect x="56" y="20" width="8" height="2" fill="#3A1E0E"/>
+    </svg>
+    <span class="steam s1" style="bottom:165px; left: calc(50% + 14px);"></span>
+    <span class="steam s2" style="bottom:165px; left: calc(50% + 10px);"></span>
+    <span class="steam s3" style="bottom:165px; left: calc(50% + 18px);"></span>
+    <span class="steam s4" style="bottom:155px; left: calc(50% + 6px);"></span>
+    <span class="steam s5" style="bottom:158px; left: calc(50% + 22px);"></span>
+    <div class="heat-glow"></div>
+  `,
+
+  lab: () => `
+    <svg class="pot-svg" viewBox="0 0 88 90" xmlns="http://www.w3.org/2000/svg">
+      <!-- base platform -->
+      <rect x="6" y="80" width="76" height="4" fill="#3A3230"/>
+      <rect x="8" y="84" width="72" height="3" fill="#1A1613"/>
+      <!-- legs -->
+      <rect x="14" y="76" width="4" height="4" fill="#4A3F35"/>
+      <rect x="70" y="76" width="4" height="4" fill="#4A3F35"/>
+
+      <!-- cylinder body (steel) -->
+      <rect x="18" y="30" width="52" height="46" fill="#8A8078"/>
+      <rect x="18" y="30" width="52" height="3" fill="#A8A098"/>
+      <rect x="18" y="73" width="52" height="3" fill="#5A5048"/>
+      <!-- vertical panel -->
+      <rect x="22" y="34" width="4" height="38" fill="#A8A098"/>
+      <rect x="62" y="34" width="4" height="38" fill="#6A6058"/>
+      <!-- rivets along side -->
+      <rect x="20" y="38" width="2" height="2" fill="#2A2220"/>
+      <rect x="20" y="50" width="2" height="2" fill="#2A2220"/>
+      <rect x="20" y="62" width="2" height="2" fill="#2A2220"/>
+      <rect x="66" y="38" width="2" height="2" fill="#2A2220"/>
+      <rect x="66" y="50" width="2" height="2" fill="#2A2220"/>
+      <rect x="66" y="62" width="2" height="2" fill="#2A2220"/>
+
+      <!-- viewport window -->
+      <rect x="30" y="44" width="28" height="18" fill="#1A1613"/>
+      <rect x="32" y="46" width="24" height="14" fill="#B4562A" opacity="0.7">
+        <animate attributeName="opacity" values="0.5;0.9;0.5" dur="1.8s" repeatCount="indefinite"/>
+      </rect>
+      <!-- bubbles inside window -->
+      <circle cx="38" cy="56" r="1.5" fill="#FEE8B0">
+        <animate attributeName="cy" values="58;48;58" dur="2.4s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;0" dur="2.4s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="46" cy="54" r="1" fill="#FEE8B0">
+        <animate attributeName="cy" values="58;46;58" dur="2s" begin="0.8s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;0" dur="2s" begin="0.8s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="52" cy="57" r="1.2" fill="#FEE8B0">
+        <animate attributeName="cy" values="58;48;58" dur="2.2s" begin="0.3s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;0" dur="2.2s" begin="0.3s" repeatCount="indefinite"/>
+      </circle>
+
+      <!-- dial on top -->
+      <rect x="30" y="22" width="28" height="8" fill="#4A3F35"/>
+      <rect x="32" y="24" width="24" height="4" fill="#2A2220"/>
+      <!-- gauge circle -->
+      <circle cx="44" cy="18" r="8" fill="#F2EBDE" stroke="#1A1613" stroke-width="1.5"/>
+      <circle cx="44" cy="18" r="6" fill="#E8DFCD"/>
+      <!-- ticks -->
+      <rect x="43.5" y="11" width="1" height="2" fill="#1A1613"/>
+      <rect x="37" y="17.5" width="2" height="1" fill="#1A1613"/>
+      <rect x="49" y="17.5" width="2" height="1" fill="#1A1613"/>
+      <!-- needle -->
+      <line x1="44" y1="18" x2="49" y2="14" stroke="#B4562A" stroke-width="1.5" stroke-linecap="square">
+        <animate attributeName="x2" values="47;50;49" dur="3s" repeatCount="indefinite"/>
+        <animate attributeName="y2" values="15;13;14" dur="3s" repeatCount="indefinite"/>
+      </line>
+      <circle cx="44" cy="18" r="1.5" fill="#1A1613"/>
+
+      <!-- steam valve -->
+      <rect x="64" y="22" width="4" height="8" fill="#3A3230"/>
+      <rect x="62" y="20" width="8" height="2" fill="#3A3230"/>
+
+      <!-- warning sticker -->
+      <rect x="26" y="66" width="14" height="6" fill="#FEE8B0"/>
+      <rect x="27" y="67" width="12" height="4" fill="#C4351E"/>
+      <text x="33" y="70.5" font-family="monospace" font-size="3" fill="#FEE8B0" text-anchor="middle" font-weight="bold">CAUTION</text>
+    </svg>
+    <span class="steam s1" style="bottom:170px; left: calc(50% + 20px);"></span>
+    <span class="steam s2" style="bottom:170px; left: calc(50% + 24px);"></span>
+    <span class="steam s3" style="bottom:170px; left: calc(50% + 16px);"></span>
+    <div class="heat-glow"></div>
+  `,
+
+  bubbling: () => `
+    <svg class="pot-svg" viewBox="0 0 88 90" xmlns="http://www.w3.org/2000/svg">
+      <!-- heat base -->
+      <rect x="10" y="82" width="68" height="3" fill="#1A1613"/>
+      <rect x="8" y="78" width="72" height="4" fill="#3A3230"/>
+      <rect x="14" y="75" width="60" height="3" fill="#E88A2A"><animate attributeName="opacity" values="0.7;1;0.7" dur="1s" repeatCount="indefinite"/></rect>
+
+      <!-- cauldron body (curved-ish with pixel steps) -->
+      <rect x="16" y="42" width="56" height="4" fill="#3E5B46"/>
+      <rect x="12" y="46" width="64" height="4" fill="#3E5B46"/>
+      <rect x="10" y="50" width="68" height="20" fill="#3E5B46"/>
+      <rect x="12" y="70" width="64" height="4" fill="#2A3F30"/>
+      <rect x="16" y="74" width="56" height="3" fill="#1A2A20"/>
+
+      <!-- highlight -->
+      <rect x="14" y="52" width="3" height="16" fill="#5A7A62"/>
+      <rect x="17" y="52" width="2" height="14" fill="#4A6A52"/>
+
+      <!-- rim -->
+      <rect x="12" y="40" width="64" height="4" fill="#1A1613"/>
+      <rect x="14" y="38" width="60" height="2" fill="#5A4A40"/>
+
+      <!-- soup surface -->
+      <rect x="16" y="42" width="56" height="8" fill="#B4562A"/>
+      <rect x="16" y="42" width="56" height="2" fill="#C97142"/>
+
+      <!-- bubbles on surface -->
+      <circle cx="26" cy="44" r="2" fill="#E88A2A">
+        <animate attributeName="r" values="1;3;1" dur="1.4s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="38" cy="43" r="1.5" fill="#FEE8B0">
+        <animate attributeName="r" values="1.5;2.5;0.5" dur="1.7s" begin="0.3s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="50" cy="44" r="2" fill="#E88A2A">
+        <animate attributeName="r" values="2;1;3" dur="1.6s" begin="0.6s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="60" cy="43" r="1.2" fill="#FEE8B0">
+        <animate attributeName="r" values="1.2;2.2;1.2" dur="1.3s" begin="0.9s" repeatCount="indefinite"/>
+      </circle>
+
+      <!-- ladle sticking out -->
+      <rect x="66" y="18" width="3" height="26" fill="#3A1E0E"/>
+      <rect x="63" y="16" width="9" height="4" fill="#5A4A40"/>
+      <rect x="65" y="20" width="5" height="2" fill="#3A1E0E"/>
+
+      <!-- thermometer stuck in -->
+      <rect x="30" y="24" width="2" height="22" fill="#F2EBDE"/>
+      <rect x="29" y="22" width="4" height="2" fill="#1A1613"/>
+      <rect x="30" y="24" width="2" height="16" fill="#C4351E">
+        <animate attributeName="height" values="12;18;14" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="y" values="28;22;26" dur="2s" repeatCount="indefinite"/>
+      </rect>
+
+      <!-- handles (cauldron ears) -->
+      <rect x="6" y="48" width="6" height="3" fill="#1A1613"/>
+      <rect x="6" y="51" width="3" height="6" fill="#1A1613"/>
+      <rect x="76" y="48" width="6" height="3" fill="#1A1613"/>
+      <rect x="79" y="51" width="3" height="6" fill="#1A1613"/>
+    </svg>
+    <span class="steam s1" style="bottom:160px; left: calc(50% - 12px);"></span>
+    <span class="steam s2" style="bottom:160px; left: calc(50% + 8px);"></span>
+    <span class="steam s3" style="bottom:160px; left: calc(50%);"></span>
+    <span class="steam s4" style="bottom:160px; left: calc(50% - 4px);"></span>
+    <span class="steam s5" style="bottom:160px; left: calc(50% + 16px);"></span>
+    <div class="heat-glow"></div>
+  `,
+
+  jiggler: (mood = 'simmer') => {
+    // color palettes by mood
+    const palettes = {
+      burnt: { body: '#9A8A70', bodyHi: '#B5A489', bodyLo: '#6A5A48', stripe: '#4A2010', stripeLo: '#2A1008', soot: '#2A2218', burner: '#6A2A10', burnerGlow: 0.4 },
+      argued: { body: '#DBD1BE', bodyHi: '#EDE3D0', bodyLo: '#9A8A70', stripe: '#C4351E', stripeLo: '#7A1E0E', soot: null, burner: '#C4351E', burnerGlow: 1.0 },
+      simmer: { body: '#EDE3D0', bodyHi: '#FFFFFF', bodyLo: '#C4B497', stripe: '#B4562A', stripeLo: '#7A3A1C', soot: null, burner: '#C4351E', burnerGlow: 0.85 },
+      cooked: { body: '#EDE3D0', bodyHi: '#FFFFFF', bodyLo: '#C4B497', stripe: '#6B8A7A', stripeLo: '#3E5B46', soot: null, burner: '#E88A2A', burnerGlow: 0.5 }
+    };
+    const p = palettes[mood] || palettes.simmer;
+    // jiggle speed by mood
+    const jiggleDur = { burnt: '0.3s', argued: '0.22s', simmer: '0.6s', 'simmer-high': '0.8s', cooked: '1.4s' }[mood] || '0.6s';
+    const jiggleAmp = { burnt: 14, argued: 18, simmer: 8, 'simmer-high': 6, cooked: 3 }[mood] || 8;
+    const pinColor = mood === 'argued' ? '#C4351E' : mood === 'burnt' ? '#7A3A1C' : (mood === 'cooked' || mood === 'simmer-high') ? '#6B8A7A' : '#C4351E';
+
+    return `
+      <svg class="pot-svg" viewBox="0 0 88 90" xmlns="http://www.w3.org/2000/svg">
+        <!-- stove -->
+        <rect x="8" y="80" width="72" height="4" fill="#3A3230"/>
+        <rect x="10" y="84" width="68" height="3" fill="#1A1613"/>
+        <ellipse cx="44" cy="80" rx="24" ry="2" fill="${p.burner}" opacity="${p.burnerGlow}">
+          <animate attributeName="opacity" values="${p.burnerGlow * 0.8};${p.burnerGlow};${p.burnerGlow * 0.8}" dur="0.8s" repeatCount="indefinite"/>
+        </ellipse>
+
+        <!-- pot body -->
+        <rect x="14" y="42" width="60" height="38" fill="${p.body}"/>
+        <rect x="14" y="42" width="60" height="3" fill="${p.bodyHi}"/>
+        <rect x="14" y="76" width="60" height="4" fill="#8A7A68"/>
+        <rect x="18" y="46" width="3" height="28" fill="${p.bodyHi}"/>
+        <rect x="68" y="46" width="4" height="30" fill="${p.bodyLo}"/>
+
+        ${p.soot ? `
+          <!-- soot patches (burnt) -->
+          <rect x="22" y="64" width="10" height="8" fill="${p.soot}" opacity="0.75"/>
+          <rect x="40" y="68" width="16" height="6" fill="${p.soot}" opacity="0.65"/>
+          <rect x="58" y="66" width="8" height="10" fill="${p.soot}" opacity="0.7"/>
+          <rect x="30" y="58" width="6" height="4" fill="${p.soot}" opacity="0.5"/>
+        ` : ''}
+
+        <!-- decorative stripe -->
+        <rect x="14" y="58" width="60" height="3" fill="${p.stripe}"/>
+        <rect x="14" y="61" width="60" height="1" fill="${p.stripeLo}"/>
+
+        <!-- handles -->
+        <rect x="6" y="50" width="8" height="6" fill="#3A1E0E"/>
+        <rect x="4" y="52" width="2" height="3" fill="#1A1613"/>
+        <rect x="74" y="50" width="8" height="6" fill="#3A1E0E"/>
+        <rect x="82" y="52" width="2" height="3" fill="#1A1613"/>
+
+        <!-- lid -->
+        <g class="jiggle">
+          <rect x="12" y="38" width="64" height="4" fill="#8A7A68"/>
+          <rect x="14" y="34" width="60" height="4" fill="${p.body}"/>
+          <rect x="18" y="34" width="4" height="2" fill="${p.bodyHi}"/>
+          <rect x="70" y="34" width="4" height="2" fill="${p.bodyLo}"/>
+
+          <rect x="38" y="28" width="12" height="6" fill="#3A3230"/>
+          <rect x="40" y="26" width="8" height="2" fill="#1A1613"/>
+
+          <g>
+            <animateTransform attributeName="transform" type="rotate" values="-${jiggleAmp} 44 22; ${jiggleAmp} 44 22; -${jiggleAmp} 44 22" dur="${jiggleDur}" repeatCount="indefinite"/>
+            <rect x="36" y="18" width="16" height="8" fill="#2A2220"/>
+            <rect x="36" y="18" width="16" height="2" fill="#4A3F35"/>
+            <rect x="38" y="20" width="2" height="4" fill="#5A4A40"/>
+            <rect x="48" y="20" width="2" height="4" fill="#5A4A40"/>
+            <rect x="42" y="14" width="4" height="4" fill="#2A2220"/>
+          </g>
+        </g>
+
+        <!-- pressure indicator pin -->
+        <rect x="20" y="32" width="3" height="4" fill="#3A3230"/>
+        <rect x="20" y="28" width="3" height="4" fill="${pinColor}">
+          <animate attributeName="height" values="2;6;4" dur="1.5s" repeatCount="indefinite"/>
+          <animate attributeName="y" values="32;26;28" dur="1.5s" repeatCount="indefinite"/>
+        </rect>
+      </svg>
+    `;
+  }
+};
+
+// ============ STATE ============
+let state = { ...TWEAK_DEFAULTS };
+
+// derive mood from convergence score (or explicit override)
+function deriveMood() {
+  if (state.moodOverride && state.moodOverride !== 'auto') return state.moodOverride;
+  const s = state.convergence;
+  if (s < 25) return 'burnt';
+  if (s < 55) return 'argued';
+  if (s < 75) return 'simmer';
+  if (s < 90) return 'simmer-high'; // hint of sparkle as we approach
+  return 'cooked';
+}
+
+const MOOD_LABELS = {
+  burnt:  'burning — stuck arguing',
+  argued: 'heated debate',
+  simmer: 'simmering nicely',
+  'simmer-high': 'almost there',
+  cooked: 'perfectly cooked'
+};
+
+function renderPot() {
+  const mood = deriveMood();
+  const pot = POTS[state.pot] || POTS.jiggler;
+  const svg = typeof pot === 'function' ? pot(mood) : pot;
+
+  // build ambient effects (steam / smoke / sparks / halo) based on mood
+  let ambient = '';
+  if (mood === 'burnt') {
+    // smoke puffs, sparks, no clean steam
+    ambient = `
+      <span class="smoke" style="bottom:175px; left: calc(50% - 10px); animation-delay: 0s;"></span>
+      <span class="smoke" style="bottom:175px; left: calc(50% + 6px); animation-delay: 0.6s;"></span>
+      <span class="smoke" style="bottom:175px; left: calc(50% + 18px); animation-delay: 1.2s; width:10px; height:10px;"></span>
+      <span class="smoke" style="bottom:175px; left: calc(50% - 14px); animation-delay: 1.6s; width:12px; height:12px;"></span>
+      <span class="spark" style="bottom:40px; left: calc(50% - 20px); --sx: -18px; animation-delay: 0.2s;"></span>
+      <span class="spark" style="bottom:38px; left: calc(50% + 22px); --sx: 24px; animation-delay: 0.8s;"></span>
+      <span class="spark" style="bottom:42px; left: calc(50% - 8px); --sx: -10px; animation-delay: 1.1s;"></span>
+      <div class="heat-glow" style="background: radial-gradient(ellipse at center, rgba(196,53,30,0.6) 0%, transparent 70%);"></div>
+    `;
+  } else if (mood === 'argued') {
+    // fast, chaotic steam
+    ambient = `
+      <span class="steam s1" style="bottom:175px; left: calc(50% - 14px); animation-duration:1.4s;"></span>
+      <span class="steam s2" style="bottom:175px; left: calc(50% + 12px); animation-duration:1.2s;"></span>
+      <span class="steam s3" style="bottom:175px; left: calc(50% - 6px); animation-duration:1.6s;"></span>
+      <span class="steam s4" style="bottom:175px; left: calc(50% + 4px); animation-duration:1.1s;"></span>
+      <span class="steam s5" style="bottom:175px; left: calc(50% + 20px); animation-duration:1.3s;"></span>
+      <div class="heat-glow" style="background: radial-gradient(ellipse at center, rgba(196,53,30,0.5) 0%, transparent 70%);"></div>
+    `;
+  } else if (mood === 'simmer') {
+    // clean steam
+    ambient = `
+      <span class="steam s1" style="bottom:175px; left: calc(50% - 14px);"></span>
+      <span class="steam s2" style="bottom:175px; left: calc(50% + 12px);"></span>
+      <span class="steam s3" style="bottom:175px; left: calc(50% - 6px);"></span>
+      <span class="steam s4" style="bottom:175px; left: calc(50% + 4px);"></span>
+      <div class="heat-glow"></div>
+    `;
+  } else if (mood === 'simmer-high') {
+    // nearly converged — steam + sparkle hints
+    ambient = `
+      <span class="steam s1" style="bottom:175px; left: calc(50% - 14px);"></span>
+      <span class="steam s2" style="bottom:175px; left: calc(50% + 12px);"></span>
+      <span class="steam s3" style="bottom:175px; left: calc(50% - 6px);"></span>
+      <span class="steam s4" style="bottom:175px; left: calc(50% + 4px);"></span>
+      <span class="sparkle" style="bottom:180px; left: calc(50% - 30px); animation-delay: 0.3s;"></span>
+      <span class="sparkle" style="bottom:200px; left: calc(50% + 28px); animation-delay: 1.1s;"></span>
+      <span class="sparkle" style="bottom:210px; left: calc(50% - 6px); animation-delay: 1.8s;"></span>
+      <div class="heat-glow"></div>
+    `;
+  } else {
+    // cooked — celebratory sparkles + gentle wisp + halo
+    ambient = `
+      <span class="steam s1" style="bottom:175px; left: calc(50% - 2px); animation-duration:4s; opacity:0.6;"></span>
+      <span class="steam s2" style="bottom:175px; left: calc(50% + 10px); animation-duration:4.4s; opacity:0.5;"></span>
+      <span class="sparkle big" style="bottom:185px; left: calc(50% - 34px); animation-delay: 0s;"></span>
+      <span class="sparkle" style="bottom:205px; left: calc(50% + 30px); animation-delay: 0.4s;"></span>
+      <span class="sparkle big" style="bottom:160px; left: calc(50% + 44px); animation-delay: 0.8s;"></span>
+      <span class="sparkle" style="bottom:220px; left: calc(50% - 12px); animation-delay: 1.2s;"></span>
+      <span class="sparkle" style="bottom:175px; left: calc(50% - 48px); animation-delay: 1.6s;"></span>
+      <span class="sparkle big" style="bottom:200px; left: calc(50% + 14px); animation-delay: 2.0s;"></span>
+      <span class="sparkle" style="bottom:155px; left: calc(50% - 28px); animation-delay: 2.4s;"></span>
+      <div class="heat-glow" style="background: radial-gradient(ellipse at center, rgba(107,138,122,0.35) 0%, transparent 70%);"></div>
+      <div class="cooked-halo">✓</div>
+    `;
+  }
+
+  document.getElementById('potWrap').innerHTML = svg + ambient;
+
+  // stage tint + mood chip
+  const stage = document.getElementById('potStage');
+  stage.classList.remove('state-burnt', 'state-cooked');
+  if (mood === 'burnt') stage.classList.add('state-burnt');
+  if (mood === 'cooked') stage.classList.add('state-cooked');
+
+  const chip = document.getElementById('moodChip');
+  chip.className = 'mood-chip ' + { burnt: 'burnt', argued: 'argued', simmer: 'simmer', 'simmer-high': 'simmer-high', cooked: 'cooked' }[mood];
+  chip.textContent = MOOD_LABELS[mood];
+}
+
+function applyAccent() {
+  const map = {
+    copper:  ['#B4562A', '#C97142', '#7A3A1C'],
+    teal:    ['#2A7A7A', '#3E9A9A', '#1A5252'],
+    plum:    ['#6B2A5C', '#8A3E76', '#4A1C3E'],
+    forest:  ['#3E5B46', '#5A7A62', '#2A3F30'],
+    ink:     ['#1A1613', '#4A3F35', '#000000']
+  };
+  const [c1, c2, c3] = map[state.accent] || map.copper;
+  document.documentElement.style.setProperty('--copper', c1);
+  document.documentElement.style.setProperty('--copper-2', c2);
+  document.documentElement.style.setProperty('--copper-3', c3);
+}
+
+function applyHeat() {
+  const speeds = { low: '3.6s', med: '2.6s', high: '1.4s' };
+  document.querySelectorAll('.steam').forEach(el => {
+    el.style.animationDuration = speeds[state.heat] || '2.6s';
+  });
+}
+
+// simulate per-round history: round 1-5, some agreement score 0-100
+// current round (3) uses state.convergence as its score
+function getRoundData() {
+  const current = Math.max(0, Math.min(100, parseInt(state.convergence) || 0));
+  // baseline for earlier rounds scales with current so the trend feels coherent
+  // when current is low: earlier rounds also low (they've been arguing all along)
+  // when current is high: earlier rounds showed rising trend
+  const r1 = Math.round(Math.max(5, current * 0.35 + 8));
+  const r2 = Math.round(Math.max(10, current * 0.7));
+  return [
+    { n: 1, score: r1, done: true },
+    { n: 2, score: r2, done: true },
+    { n: 3, score: current, current: true },
+    { n: 4, score: null, pending: true },
+    { n: 5, score: null, pending: true }
+  ];
+}
+
+// emoji per round based on score and delta from previous
+function emojiForRound(score, prev) {
+  if (score == null) return '·';
+  const delta = prev == null ? 0 : score - prev;
+  if (score < 25) return '🔥';         // dispute
+  if (score >= 85) return '✓';         // done / agreed
+  if (delta >= 15) return '🤝';        // big move toward agreement
+  if (delta <= -10) return '🔥';       // moved apart
+  return '↔';                           // debate
+}
+
+function deriveVibe() {
+  const rounds = getRoundData();
+  const done = rounds.filter(r => r.score != null);
+  const latest = done[done.length - 1].score;
+  const first = done[0].score;
+  const trend = latest - first;
+  const doneCount = done.length;
+
+  // shape-of-discourse reads
+  if (latest >= 90) return { verdict: "They've landed together", sub: "Both models now agree on the plan." };
+  if (latest >= 75 && trend >= 15) return { verdict: "Close to agreement", sub: "Still nudging details, but the shape is settled." };
+  if (trend >= 20) return { verdict: "Finding common ground", sub: `Agreement has climbed ${trend} points across ${doneCount} rounds.` };
+  if (trend >= 5) return { verdict: "Slowly coming around", sub: "Small moves toward each other every round." };
+  if (Math.abs(trend) < 5 && latest < 40) return { verdict: "Stuck arguing", sub: `${doneCount} rounds in and neither side has budged.` };
+  if (Math.abs(trend) < 5) return { verdict: "Holding steady", sub: "Partial agreement, no movement this round." };
+  if (trend <= -15) return { verdict: "Drifting apart", sub: `Disagreement has grown since round 1 (${Math.abs(trend)} points lost).` };
+  if (trend < 0) return { verdict: "One side pushing back", sub: "The Critic keeps surfacing new problems." };
+  return { verdict: "Working it out", sub: "Debate in progress." };
+}
+
+function applyVibe() {
+  const v = deriveVibe();
+  const vv = document.getElementById('vibeVerdict');
+  const vs = document.getElementById('vibeSub');
+  if (vv) vv.textContent = v.verdict;
+  if (vs) vs.textContent = v.sub;
+
+  // sparkline
+  const rounds = getRoundData();
+  const svg = document.getElementById('sparkSvg');
+  if (!svg) return;
+  const W = 240, H = 70, PAD_X = 14, PAD_Y = 8;
+  const xFor = (i) => PAD_X + (i / 4) * (W - 2 * PAD_X);
+  const yFor = (s) => PAD_Y + (1 - s / 100) * (H - 2 * PAD_Y);
+
+  // build line points (only through done/current rounds)
+  const linePts = rounds
+    .map((r, i) => r.score != null ? `${xFor(i)},${yFor(r.score)}` : null)
+    .filter(Boolean)
+    .join(' ');
+  const line = document.getElementById('sparkLine');
+  if (line) line.setAttribute('points', linePts);
+
+  // fill polygon — from line down to bottom
+  const lastDoneIdx = rounds.findIndex(r => r.current) !== -1
+    ? rounds.findIndex(r => r.current)
+    : rounds.filter(r => r.done).length - 1;
+  const fillPts = rounds
+    .slice(0, lastDoneIdx + 1)
+    .map((r, i) => `${xFor(i)},${yFor(r.score)}`)
+    .concat([`${xFor(lastDoneIdx)},${H - PAD_Y + 2}`, `${xFor(0)},${H - PAD_Y + 2}`])
+    .join(' ');
+  const fill = document.getElementById('sparkFill');
+  if (fill) fill.setAttribute('points', fillPts);
+
+  // dots
+  const dots = document.getElementById('sparkDots');
+  if (dots) {
+    dots.innerHTML = rounds.map((r, i) => {
+      const cx = xFor(i);
+      const cy = r.score != null ? yFor(r.score) : yFor(50);
+      const cls = r.current ? 'active' : r.pending ? 'pending' : 'done';
+      const rad = r.current ? 4.5 : 3.5;
+      return `<circle class="spark-dot ${cls}" cx="${cx}" cy="${cy}" r="${rad}"/>`;
+    }).join('');
+  }
+
+  // round emoji chips
+  const chipsEl = document.getElementById('roundChips');
+  if (chipsEl) {
+    chipsEl.innerHTML = rounds.map((r, i) => {
+      const prev = i > 0 ? rounds[i - 1].score : null;
+      const emoji = r.score != null ? emojiForRound(r.score, prev) : '·';
+      const cls = r.current ? 'current' : r.pending ? 'pending' : '';
+      return `<div class="rchip ${cls}" data-round="${r.n}"><span class="ri">${emoji}</span><span class="rn">${r.n}</span></div>`;
+    }).join('');
+  }
+}
+
+function applyConvergence() {
+  // update active round pill score on the top timeline
+  const s = Math.max(0, Math.min(100, parseInt(state.convergence) || 0));
+  const activePill = document.querySelector('.round-pill.active .score-chip');
+  if (activePill) activePill.textContent = s;
+  const cv = document.getElementById('convVal');
+  if (cv) cv.textContent = s;
+}
+
+function renderAll() {
+  applyConvergence();
+  applyVibe();
+  renderPot();
+  applyAccent();
+  applyHeat();
+}
+
+// details tray toggle
+const detailsEl = document.getElementById('details');
+const detailsToggle = document.getElementById('detailsToggle');
+if (detailsToggle) {
+  detailsToggle.addEventListener('click', () => {
+    detailsEl.classList.toggle('open');
+  });
+}
+
+// ============ TWEAK UI WIRING ============
+document.querySelectorAll('[data-tweak]').forEach(group => {
+  const key = group.dataset.tweak;
+  group.querySelectorAll('[data-val]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      group.querySelectorAll('[data-val]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state[key] = btn.dataset.val;
+      renderAll();
+      try {
+        window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [key]: btn.dataset.val } }, '*');
+      } catch(e) {}
+    });
+  });
+});
+
+// convergence slider
+const convSlider = document.getElementById('convSlider');
+if (convSlider) {
+  convSlider.addEventListener('input', (e) => {
+    state.convergence = parseInt(e.target.value);
+    renderAll();
+    try {
+      window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { convergence: state.convergence } }, '*');
+    } catch(e) {}
+  });
+  convSlider.value = state.convergence;
+}
+
+// apply state to UI from defaults
+function syncTweakUI() {
+  Object.entries(state).forEach(([k, v]) => {
+    const grp = document.querySelector(`[data-tweak="${k}"]`);
+    if (!grp) return;
+    grp.querySelectorAll('[data-val]').forEach(b => {
+      b.classList.toggle('active', b.dataset.val === v);
+    });
+  });
+}
+
+// ============ EDIT MODE ============
+window.addEventListener('message', (e) => {
+  if (!e.data || !e.data.type) return;
+  if (e.data.type === '__activate_edit_mode') {
+    document.getElementById('tweaks').classList.add('visible');
+  } else if (e.data.type === '__deactivate_edit_mode') {
+    document.getElementById('tweaks').classList.remove('visible');
+  }
+});
+
+try {
+  window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+} catch(e) {}
+
+// ============ INIT ============
+renderAll();
+syncTweakUI();
+
+// simulate streaming text being added over time
+(function simulateStream() {
+  const body = document.getElementById('criticBody');
+  const chunks = [
+    " as it accrues.",
+    " Also: the round number should always be visible; users lose track around round 4."
+  ];
+  let i = 0;
+  const li = body.querySelector('li:last-child');
+  const caret = li && li.querySelector('.caret');
+  const int = setInterval(() => {
+    if (i >= chunks.length || !caret) { clearInterval(int); return; }
+    caret.insertAdjacentText('beforebegin', chunks[i]);
+    i++;
+  }, 2400);
+})();
+</script>
+
+</body>
+</html>

@@ -235,10 +235,10 @@ export async function startSession(config: {
 				session.rounds[idx] = { ...session.rounds[idx], builderTokensUsed: tokens, actualCost: cost, status: 'critic_streaming' };
 			} catch (e) {
 				await handleStreamError(e, r, 'Builder');
-				if (session.status === 'stopped' || session.status === 'error') break;
+				if ((session.status as SessionState['status']) === 'stopped' || session.status === 'error') break;
 			}
 
-			if (session.status === 'stopped') break;
+			if ((session.status as SessionState['status']) === 'stopped') break;
 
 			// Critic
 			const idx = session.rounds.length - 1;
@@ -276,10 +276,10 @@ export async function startSession(config: {
 				session.totalActualCost += session.rounds[idx].actualCost;
 			} catch (e) {
 				await handleStreamError(e, r, 'Critic');
-				if (session.status === 'stopped' || session.status === 'error') break;
+				if ((session.status as SessionState['status']) === 'stopped' || session.status === 'error') break;
 			}
 
-			if (session.status === 'stopped') break;
+			if ((session.status as SessionState['status']) === 'stopped') break;
 
 			// Pause between rounds
 			if (config.pauseBetweenRounds && r < config.totalRounds) {
@@ -293,18 +293,18 @@ export async function startSession(config: {
 						}
 					}, 200);
 				});
-				if (session.status === 'stopped') break;
+				if ((session.status as SessionState['status']) === 'stopped') break;
 				session = { ...session, status: 'running' };
 			}
 		}
 
-		if (session.status === 'stopped') {
+		if ((session.status as SessionState['status']) === 'stopped') {
 			saveToHistory(session);
 			return;
 		}
 
 		// Summary
-		if (config.summaryEnabled && session.status !== 'stopped') {
+		if (config.summaryEnabled && (session.status as SessionState['status']) !== 'stopped') {
 			session = { ...session, summaryStatus: 'streaming' };
 			// Use a reliable fast model — NOT cheapest (low-quality models hallucinate badly on long prompts)
 			const SUMMARY_MODEL = 'google/gemini-2.0-flash-001';
