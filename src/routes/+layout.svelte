@@ -29,6 +29,14 @@
 
 <svelte:head>
 	<title>PressureCooker</title>
+	<!-- Runs synchronously before first paint to prevent theme flash -->
+	{@html `<script>
+		(function(){
+			var s = localStorage.getItem('pressurecooker_theme');
+			var dark = s === 'dark' || (!s && window.matchMedia('(prefers-color-scheme: dark)').matches);
+			if (dark) document.documentElement.classList.add('dark');
+		})();
+	</script>`}
 </svelte:head>
 
 <Nav />
