@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { validateKey } from '$lib/api/openrouter';
 	import {
 		DEFAULT_SESSION_PRESET_ID,
 		type SessionPreset,
@@ -9,7 +8,7 @@
 	} from '$lib/config/sessionPresets';
 	import { findModel } from '$lib/stores/models.svelte';
 	import { startSession } from '$lib/stores/session.svelte';
-	import { loadKey, saveKey } from '$lib/utils/storage';
+	import { loadKey } from '$lib/utils/storage';
 	import CostEstimate from './CostEstimate.svelte';
 	import ModelPickerModal from './ModelPickerModal.svelte';
 	import ProviderBadge from './ProviderBadge.svelte';
@@ -21,8 +20,6 @@
 
 	const initialPreset = getSessionPreset(DEFAULT_SESSION_PRESET_ID);
 
-	let apiKey = $state(loadKey());
-	let keyStatus = $state<'idle' | 'valid' | 'invalid' | 'checking'>('idle');
 	let selectedPresetId = $state<SessionPresetId>(initialPreset.id);
 	let pendingPresetId = $state<SessionPresetId | null>(null);
 	let llm1Id = $state('anthropic/claude-sonnet-4-5');
@@ -58,21 +55,6 @@
 		);
 	});
 
-	$effect(() => {
-		if (apiKey && loadKey() === apiKey) keyStatus = 'valid';
-	});
-
-	async function onKeyBlur() {
-		if (!apiKey) {
-			keyStatus = 'idle';
-			return;
-		}
-		keyStatus = 'checking';
-		const valid = await validateKey(apiKey);
-		keyStatus = valid ? 'valid' : 'invalid';
-		if (valid) saveKey(apiKey);
-	}
-
 	function applyPreset(preset: SessionPreset) {
 		selectedPresetId = preset.id;
 		llm1Instruction = preset.builderInstruction;
@@ -107,7 +89,8 @@
 
 	function validate(): boolean {
 		const next: Record<string, string> = {};
-		if (!apiKey || keyStatus !== 'valid') next.apiKey = 'A valid OpenRouter key is required.';
+		const apiKey = loadKey();
+		if (!apiKey) next.apiKey = 'Set your OpenRouter key via the nav menu.';
 		if (!llm1Id) next.llm1 = 'Choose a Builder model.';
 		if (!llm2Id) next.llm2 = 'Choose a Critic model.';
 		if (!llm1Instruction.trim()) next.llm1Instruction = 'Builder instruction is required.';
@@ -119,6 +102,8 @@
 
 	async function handleStart() {
 		if (!validate()) return;
+		const apiKey = loadKey();
+		if (!apiKey) return;
 		isStarting = true;
 		await startSession({
 			apiKey,
@@ -139,222 +124,186 @@
 <div class={`overflow-hidden transition-all duration-300 ${collapsed ? 'max-h-0 opacity-0' : 'max-h-[9999px] opacity-100'}`}>
 	<div class="pc-card rounded-[3px] bg-[var(--canvas-2)] p-6 shadow-[0_18px_40px_color-mix(in_srgb,var(--ink)_8%,transparent)]">
 		<div class="mb-6">
-			<div>
-				<div class="pc-kicker mb-2">Session setup</div>
-				<h2 class="pc-serif text-[34px] leading-none text-[var(--ink)]">Set the pot</h2>
-				<p class="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-2)]">
-					Pick a session mode, then swap models or edit the prompts however you like.
-				</p>
-			</div>
+			<div class="pc-kicker mb-2">Session setup</div>
+			<h2 class="pc-serif text-[34px] leading-none text-[var(--ink)]">Set the pot</h2>
+			<p class="mt-2 text-sm leading-6 text-[var(--ink-2)]">
+				Pick a session mode, then swap models or edit the prompts however you like.
+			</p>
 		</div>
 
-		<div class="mb-5 rounded-[3px] border border-[var(--line)] bg-[var(--canvas)] p-4">
-			<div class="mb-3 flex flex-wrap items-center gap-3">
-				<label class="pc-kicker block" for="session-mode">Session Mode</label>
-				{#if isPresetCustomized}
-					<span class="pc-mono rounded-[999px] border border-[var(--line)] px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-[var(--ink-3)]">
-						Customized
-					</span>
+		{#if errors.apiKey}
+			<div class="mb-5 flex items-center gap-2 rounded-[3px] border border-[var(--alarm)] bg-[color-mix(in_srgb,var(--alarm)_8%,transparent)] px-4 py-3 text-sm text-[var(--alarm)]">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+				{errors.apiKey}
+			</div>
+		{/if}
+
+		<div class="space-y-6">
+			<!-- 1. Session Mode -->
+			<div class="rounded-[3px] border border-[var(--line)] bg-[var(--canvas)] p-4">
+				<div class="mb-3 flex flex-wrap items-center gap-3">
+					<label class="pc-kicker block" for="session-mode">Session Mode</label>
+					{#if isPresetCustomized}
+						<span class="pc-mono rounded-[999px] border border-[var(--line)] px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-[var(--ink-3)]">
+							Customized
+						</span>
+					{/if}
+				</div>
+				<select
+					id="session-mode"
+					value={selectedPresetId}
+					onchange={(event) => handlePresetSelection((event.currentTarget as HTMLSelectElement).value)}
+					class="w-full rounded-[3px] border border-[var(--line)] bg-[var(--canvas)] px-3 py-3 text-sm text-[var(--ink)] outline-none transition-colors focus:border-[var(--copper)]"
+				>
+					{#each SESSION_PRESETS as preset}
+						<option value={preset.id}>{preset.name}</option>
+					{/each}
+				</select>
+				<div class="mt-3 text-sm leading-6 text-[var(--ink-2)]">{selectedPreset.shortDescription}</div>
+
+				{#if pendingPreset}
+					<div class="mt-4 rounded-[3px] border border-[var(--copper)] bg-[color-mix(in_srgb,var(--copper)_8%,transparent)] p-4">
+						<div class="pc-mono text-[10px] uppercase tracking-[0.1em] text-[var(--copper-3)]">Apply new mode?</div>
+						<p class="mt-2 text-sm leading-6 text-[var(--ink-2)]">
+							Switching to <span class="text-[var(--ink)]">{pendingPreset.name}</span> will replace the current Builder instruction,
+							Critic instruction, rounds, and session options. Your typed topic will stay.
+						</p>
+						<div class="mt-3 flex gap-2">
+							<button
+								type="button"
+								onclick={confirmPresetSwitch}
+								class="pc-mono rounded-[2px] border border-[var(--copper-3)] bg-[var(--copper)] px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-[var(--canvas)] transition-colors hover:bg-[var(--copper-2)]"
+							>
+								Apply preset
+							</button>
+							<button
+								type="button"
+								onclick={cancelPresetSwitch}
+								class="pc-mono rounded-[2px] border border-[var(--line)] bg-[var(--canvas)] px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-[var(--ink)]"
+							>
+								Cancel
+							</button>
+						</div>
+					</div>
 				{/if}
 			</div>
 
-			<select
-				id="session-mode"
-				value={selectedPresetId}
-				onchange={(event) =>
-					handlePresetSelection((event.currentTarget as HTMLSelectElement).value)}
-				class="w-full rounded-[3px] border border-[var(--line)] bg-[var(--canvas)] px-3 py-3 text-sm text-[var(--ink)] outline-none transition-colors focus:border-[var(--copper)]"
-			>
-				{#each SESSION_PRESETS as preset}
-					<option value={preset.id}>{preset.name}</option>
-				{/each}
-			</select>
+			<!-- 2. Topic -->
+			<div>
+				<label class="pc-kicker mb-2 block" for="topic">Topic</label>
+				<input
+					id="topic"
+					type="text"
+					bind:value={topic}
+					placeholder={topicPlaceholder}
+					class={`pc-serif w-full rounded-[3px] border bg-[var(--canvas)] px-4 py-4 text-[22px] leading-[1.3] text-[var(--ink)] outline-none transition-colors placeholder:text-[18px] placeholder:text-[var(--ink-3)] ${
+						errors.topic ? 'border-[var(--alarm)]' : 'border-[var(--line)] focus:border-[var(--copper)]'
+					}`}
+				/>
+				{#if errors.topic}<p class="mt-1 text-xs text-[var(--alarm)]">{errors.topic}</p>{/if}
+			</div>
 
-			<div class="mt-3 text-sm leading-6 text-[var(--ink-2)]">{selectedPreset.shortDescription}</div>
-
-			{#if pendingPreset}
-				<div class="mt-4 rounded-[3px] border border-[var(--copper)] bg-[color-mix(in_srgb,var(--copper)_8%,transparent)] p-4">
-					<div class="pc-mono text-[10px] uppercase tracking-[0.1em] text-[var(--copper-3)]">
-						Apply new mode?
-					</div>
-					<p class="mt-2 text-sm leading-6 text-[var(--ink-2)]">
-						Switching to <span class="text-[var(--ink)]">{pendingPreset.name}</span> will replace the current Builder instruction,
-						Critic instruction, rounds, and session options. Your typed topic will stay.
-					</p>
-					<div class="mt-3 flex gap-2">
-						<button
-							type="button"
-							onclick={confirmPresetSwitch}
-							class="pc-mono rounded-[2px] border border-[var(--copper-3)] bg-[var(--copper)] px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-[var(--canvas)] transition-colors hover:bg-[var(--copper-2)]"
-						>
-							Apply preset
-						</button>
-						<button
-							type="button"
-							onclick={cancelPresetSwitch}
-							class="pc-mono rounded-[2px] border border-[var(--line)] bg-[var(--canvas)] px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-[var(--ink)]"
-						>
-							Cancel
-						</button>
-					</div>
-				</div>
-			{/if}
-		</div>
-
-		<div class="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-			<div class="space-y-5">
-				<div>
-					<label class="pc-kicker mb-2 block" for="apikey">OpenRouter API Key</label>
-					<div class="relative">
-						<input
-							id="apikey"
-							type="password"
-							bind:value={apiKey}
-							onblur={onKeyBlur}
-							placeholder="sk-or-..."
-							class={`w-full rounded-[3px] border bg-[var(--canvas)] px-3 py-3 pr-9 text-sm text-[var(--ink)] outline-none transition-colors placeholder:text-[var(--ink-3)] ${
-								errors.apiKey
-									? 'border-[var(--alarm)]'
-									: keyStatus === 'valid'
-										? 'border-[var(--cool)]'
-										: 'border-[var(--line)] focus:border-[var(--copper)]'
-							}`}
-						/>
-						{#if keyStatus === 'checking'}
-							<span class="absolute right-3 top-3 text-xs text-[var(--ink-3)]">...</span>
-						{:else if keyStatus === 'valid'}
-							<span class="absolute right-3 top-3 text-sm text-[var(--cool)]">✓</span>
-						{:else if keyStatus === 'invalid'}
-							<span class="absolute right-3 top-3 text-sm text-[var(--alarm)]">✗</span>
-						{/if}
-					</div>
-					{#if errors.apiKey}
-						<p class="mt-1 text-xs text-[var(--alarm)]">{errors.apiKey}</p>
-					{/if}
-					<a href="https://openrouter.ai/keys" target="_blank" class="mt-2 inline-block text-xs text-[var(--copper-3)] underline">
-						Get a key
-					</a>
-				</div>
-
-				<div class="grid gap-4 md:grid-cols-2">
-					<div>
-						<div class="pc-kicker mb-2 block">Builder LLM</div>
-						<button
-							type="button"
-							onclick={() => (picker1Open = true)}
-							class={`flex w-full items-center gap-2 rounded-[3px] border bg-[var(--canvas)] px-3 py-3 text-sm text-[var(--ink)] transition-colors ${
-								errors.llm1 ? 'border-[var(--alarm)]' : 'border-[var(--line)] hover:border-[var(--copper)]'
-							}`}
-						>
-							{#if llm1Id}
-								<ProviderBadge modelId={llm1Id} />
-								<span class="truncate text-left">{llm1Model?.name ?? llm1Id}</span>
-							{:else}
-								<span class="text-[var(--ink-3)]">Select model…</span>
-							{/if}
-						</button>
-						{#if errors.llm1}<p class="mt-1 text-xs text-[var(--alarm)]">{errors.llm1}</p>{/if}
-					</div>
-
-					<div>
-						<div class="pc-kicker mb-2 block">Critic LLM</div>
-						<button
-							type="button"
-							onclick={() => (picker2Open = true)}
-							class={`flex w-full items-center gap-2 rounded-[3px] border bg-[var(--canvas)] px-3 py-3 text-sm text-[var(--ink)] transition-colors ${
-								errors.llm2 ? 'border-[var(--alarm)]' : 'border-[var(--line)] hover:border-[var(--copper)]'
-							}`}
-						>
-							{#if llm2Id}
-								<ProviderBadge modelId={llm2Id} />
-								<span class="truncate text-left">{llm2Model?.name ?? llm2Id}</span>
-							{:else}
-								<span class="text-[var(--ink-3)]">Select model…</span>
-							{/if}
-						</button>
-						{#if errors.llm2}<p class="mt-1 text-xs text-[var(--alarm)]">{errors.llm2}</p>{/if}
-					</div>
-				</div>
-
-				<div class="grid gap-4 md:grid-cols-2">
-					<div>
-						<label class="pc-kicker mb-2 block" for="llm1inst">Builder instruction</label>
-						<textarea
-							id="llm1inst"
-							bind:value={llm1Instruction}
-							rows="9"
-							class={`w-full resize-none rounded-[3px] border bg-[var(--canvas)] px-3 py-3 text-sm leading-6 text-[var(--ink)] outline-none transition-colors ${
-								errors.llm1Instruction ? 'border-[var(--alarm)]' : 'border-[var(--line)] focus:border-[var(--copper)]'
-							}`}
-						></textarea>
-						{#if errors.llm1Instruction}<p class="mt-1 text-xs text-[var(--alarm)]">{errors.llm1Instruction}</p>{/if}
-					</div>
-					<div>
-						<label class="pc-kicker mb-2 block" for="llm2inst">Critic instruction</label>
-						<textarea
-							id="llm2inst"
-							bind:value={llm2Instruction}
-							rows="9"
-							class={`w-full resize-none rounded-[3px] border bg-[var(--canvas)] px-3 py-3 text-sm leading-6 text-[var(--ink)] outline-none transition-colors ${
-								errors.llm2Instruction ? 'border-[var(--alarm)]' : 'border-[var(--line)] focus:border-[var(--copper)]'
-							}`}
-						></textarea>
-						{#if errors.llm2Instruction}<p class="mt-1 text-xs text-[var(--alarm)]">{errors.llm2Instruction}</p>{/if}
-					</div>
-				</div>
-
-				<div>
-					<label class="pc-kicker mb-2 block" for="topic">Topic</label>
-					<input
-						id="topic"
-						type="text"
-						bind:value={topic}
-						placeholder={topicPlaceholder}
-						class={`pc-serif w-full rounded-[3px] border bg-[var(--canvas)] px-4 py-4 text-[22px] leading-[1.25] text-[var(--ink)] outline-none transition-colors placeholder:text-[18px] placeholder:text-[var(--ink-3)] ${
-							errors.topic ? 'border-[var(--alarm)]' : 'border-[var(--line)] focus:border-[var(--copper)]'
+			<!-- 3. Builder + Critic -->
+			<div class="grid gap-5 md:grid-cols-2">
+				<div class="space-y-3">
+					<div class="pc-kicker">Builder</div>
+					<button
+						type="button"
+						onclick={() => (picker1Open = true)}
+						class={`flex w-full items-center gap-2 rounded-[3px] border bg-[var(--canvas)] px-3 py-2.5 text-sm text-[var(--ink)] transition-colors ${
+							errors.llm1 ? 'border-[var(--alarm)]' : 'border-[var(--line)] hover:border-[var(--copper)]'
 						}`}
-					/>
-					{#if errors.topic}<p class="mt-1 text-xs text-[var(--alarm)]">{errors.topic}</p>{/if}
+					>
+						{#if llm1Id}
+							<ProviderBadge modelId={llm1Id} />
+							<span class="truncate text-left">{llm1Model?.name ?? llm1Id}</span>
+						{:else}
+							<span class="text-[var(--ink-3)]">Select model…</span>
+						{/if}
+					</button>
+					{#if errors.llm1}<p class="text-xs text-[var(--alarm)]">{errors.llm1}</p>{/if}
+					<textarea
+						id="llm1inst"
+						bind:value={llm1Instruction}
+						rows="10"
+						class={`w-full resize-none rounded-[3px] border bg-[var(--canvas)] px-3 py-3 text-sm leading-6 text-[var(--ink)] outline-none transition-colors ${
+							errors.llm1Instruction ? 'border-[var(--alarm)]' : 'border-[var(--line)] focus:border-[var(--copper)]'
+						}`}
+					></textarea>
+					{#if errors.llm1Instruction}<p class="text-xs text-[var(--alarm)]">{errors.llm1Instruction}</p>{/if}
+				</div>
+
+				<div class="space-y-3">
+					<div class="pc-kicker">Critic</div>
+					<button
+						type="button"
+						onclick={() => (picker2Open = true)}
+						class={`flex w-full items-center gap-2 rounded-[3px] border bg-[var(--canvas)] px-3 py-2.5 text-sm text-[var(--ink)] transition-colors ${
+							errors.llm2 ? 'border-[var(--alarm)]' : 'border-[var(--line)] hover:border-[var(--copper)]'
+						}`}
+					>
+						{#if llm2Id}
+							<ProviderBadge modelId={llm2Id} />
+							<span class="truncate text-left">{llm2Model?.name ?? llm2Id}</span>
+						{:else}
+							<span class="text-[var(--ink-3)]">Select model…</span>
+						{/if}
+					</button>
+					{#if errors.llm2}<p class="text-xs text-[var(--alarm)]">{errors.llm2}</p>{/if}
+					<textarea
+						id="llm2inst"
+						bind:value={llm2Instruction}
+						rows="10"
+						class={`w-full resize-none rounded-[3px] border bg-[var(--canvas)] px-3 py-3 text-sm leading-6 text-[var(--ink)] outline-none transition-colors ${
+							errors.llm2Instruction ? 'border-[var(--alarm)]' : 'border-[var(--line)] focus:border-[var(--copper)]'
+						}`}
+					></textarea>
+					{#if errors.llm2Instruction}<p class="text-xs text-[var(--alarm)]">{errors.llm2Instruction}</p>{/if}
 				</div>
 			</div>
 
-			<div class="space-y-5">
-				<div class="rounded-[3px] border border-[var(--line)] bg-[var(--canvas)] p-4">
-					<div class="pc-kicker mb-3">Suggested rounds</div>
-					<div class="flex items-center gap-3">
-						<input
-							id="rounds"
-							type="range"
-							min="1"
-							max="10"
-							bind:value={rounds}
-							class="flex-1 accent-[var(--copper)]"
-						/>
-						<span class="pc-serif min-w-[76px] text-right text-[28px] leading-none text-[var(--ink)]">{rounds}</span>
-					</div>
+			<!-- 4. Rounds -->
+			<div class="rounded-[3px] border border-[var(--line)] bg-[var(--canvas)] p-4">
+				<div class="mb-3 flex items-center justify-between">
+					<label class="pc-kicker" for="rounds">Rounds</label>
+					<span class="pc-serif text-[28px] leading-none text-[var(--ink)]">{rounds}</span>
 				</div>
-
-				<div class="rounded-[3px] border border-[var(--line)] bg-[var(--canvas)] p-4">
-					<div class="pc-kicker mb-3">Session options</div>
-					<label class="mb-3 flex items-start gap-2 text-sm text-[var(--ink-2)]">
-						<input type="checkbox" bind:checked={summaryEnabled} class="mt-1 accent-[var(--copper)]" />
-						<span>Generate a post-session summary.</span>
-					</label>
-					<label class="flex items-start gap-2 text-sm text-[var(--ink-2)]">
-						<input type="checkbox" bind:checked={pauseBetweenRounds} class="mt-1 accent-[var(--copper)]" />
-						<span>Pause between rounds so you can edit instructions.</span>
-					</label>
+				<input
+					id="rounds"
+					type="range"
+					min="1"
+					max="10"
+					bind:value={rounds}
+					class="w-full accent-[var(--copper)]"
+				/>
+				<div class="mt-2 flex justify-between text-[10px] text-[var(--ink-3)]">
+					<span>1 — quick</span>
+					<span>10 — thorough</span>
 				</div>
+			</div>
 
-				<div class="rounded-[3px] border border-[var(--line)] bg-[var(--canvas)] p-4">
+			<!-- 5. Options -->
+			<div class="flex flex-wrap gap-x-8 gap-y-3">
+				<label class="flex items-center gap-2 text-sm text-[var(--ink-2)]">
+					<input type="checkbox" bind:checked={summaryEnabled} class="accent-[var(--copper)]" />
+					Generate a post-session summary
+				</label>
+				<label class="flex items-center gap-2 text-sm text-[var(--ink-2)]">
+					<input type="checkbox" bind:checked={pauseBetweenRounds} class="accent-[var(--copper)]" />
+					Pause between rounds to edit instructions
+				</label>
+			</div>
+
+			<!-- 6. Cost + Cook -->
+			<div class="flex items-end justify-between gap-6 border-t border-[var(--line)] pt-5">
+				<div class="text-xs text-[var(--ink-3)]">
 					<CostEstimate {llm1Id} {llm2Id} {rounds} {topic} {llm1Instruction} {llm2Instruction} {summaryEnabled} />
 				</div>
-
 				<button
 					type="button"
 					onclick={handleStart}
 					disabled={isStarting}
-					class="pc-mono w-full rounded-[2px] border border-[var(--copper-3)] bg-[var(--copper)] px-4 py-3 text-[11px] uppercase tracking-[0.1em] text-[var(--canvas)] transition-colors hover:bg-[var(--copper-2)] disabled:opacity-50"
+					class="pc-mono shrink-0 rounded-[2px] border border-[var(--copper-3)] bg-[var(--copper)] px-8 py-3 text-[11px] uppercase tracking-[0.1em] text-[var(--canvas)] transition-colors hover:bg-[var(--copper-2)] disabled:opacity-50"
 				>
 					{isStarting ? 'Starting…' : 'Pressure cook'}
 				</button>
