@@ -105,7 +105,7 @@
 	.details {
 		margin-top: auto;
 		border-top: 1px dashed var(--line-2);
-		background: #e4d9c0;
+		background: var(--canvas-2);
 	}
 
 	.details-toggle {
@@ -125,7 +125,7 @@
 	}
 
 	.details-toggle:hover {
-		background: rgba(26, 22, 19, 0.04);
+		background: color-mix(in srgb, var(--ink) 4%, transparent);
 	}
 
 	.details-label {
@@ -200,7 +200,7 @@
 	.credits-bar {
 		height: 10px;
 		margin: 10px 0 8px;
-		background: rgba(26, 22, 19, 0.08);
+		background: color-mix(in srgb, var(--ink) 8%, transparent);
 		border: 1px solid var(--line-2);
 		border-radius: 2px;
 		overflow: hidden;

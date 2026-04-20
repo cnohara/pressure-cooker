@@ -150,7 +150,7 @@
 				onclick={() => onselect(round.roundNumber)}
 			>
 				<span class="text-[16px] leading-none">{emojiForRound(round.score, filledRounds[index - 1]?.score ?? null)}</span>
-				<span class={`pc-mono text-[9px] ${index === currentRoundIndex ? 'text-[#E8DCBF]' : 'text-[var(--ink-3)]'}`}>{round.roundNumber}</span>
+				<span class={`pc-mono text-[9px] ${index === currentRoundIndex ? 'text-[var(--canvas-2)]' : 'text-[var(--ink-3)]'}`}>{round.roundNumber}</span>
 			</button>
 		{/each}
 	</div>

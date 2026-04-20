@@ -93,6 +93,9 @@
 	}
 
 	const finalRound = $derived.by(() => session?.rounds.at(-1) ?? null);
+	const showFinalOutput = $derived(
+		isComplete || session?.finalBuilderStatus === 'streaming' || session?.finalBuilderStatus === 'complete'
+	);
 </script>
 
 {#if !session}
@@ -118,7 +121,7 @@
 				onSelectRound={handleSelectRound}
 			/>
 
-			<div class="min-w-0 flex-1 border border-l-0 border-[var(--line)] bg-[rgba(242,235,222,0.78)] max-[1180px]:border-l max-[1180px]:border-t-0">
+			<div class="min-w-0 flex-1 border border-l-0 border-[var(--line)] bg-[var(--canvas)] max-[1180px]:border-l max-[1180px]:border-t-0">
 				<Topbar topic={session.topic} builderModel={builderModelName} criticModel={criticModelName} />
 				<RoundTimeline
 					rounds={session.rounds}
@@ -128,7 +131,7 @@
 				/>
 
 				{#if session.status === 'error'}
-					<div class="mx-6 mt-6 rounded-[3px] border border-[var(--alarm)] bg-[rgba(196,53,30,0.08)] px-4 py-3 text-sm text-[var(--alarm)]">
+					<div class="mx-6 mt-6 rounded-[3px] border border-[var(--alarm)] bg-[color-mix(in_srgb,var(--alarm)_8%,transparent)] px-4 py-3 text-sm text-[var(--alarm)]">
 						{session.errorMessage ?? 'An unexpected error occurred.'}
 					</div>
 				{/if}
@@ -162,13 +165,14 @@
 					</div>
 				{/if}
 
-				{#if isComplete && finalRound}
+				{#if showFinalOutput && session}
 					<div class="border-t border-[var(--line)] px-6 py-6">
 						<div class={`grid gap-6 ${session.summaryEnabled && session.summaryStatus !== 'idle' ? 'xl:grid-cols-2' : 'grid-cols-1'}`}>
 							<FinalOutputCard
 								title="Final Builder Output"
-								content={finalRound.builderOutput}
+								content={session.finalBuilderOutput}
 								modelId={builderModelName}
+								streaming={session.finalBuilderStatus === 'streaming'}
 							/>
 							{#if session.summaryEnabled && session.summaryStatus !== 'idle'}
 								<SummaryCard {session} />

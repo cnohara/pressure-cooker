@@ -137,7 +137,7 @@
 </script>
 
 <div class={`overflow-hidden transition-all duration-300 ${collapsed ? 'max-h-0 opacity-0' : 'max-h-[9999px] opacity-100'}`}>
-	<div class="pc-card rounded-[3px] bg-[rgba(235,225,204,0.95)] p-6 shadow-[0_18px_40px_rgba(26,22,19,0.08)]">
+	<div class="pc-card rounded-[3px] bg-[var(--canvas-2)] p-6 shadow-[0_18px_40px_color-mix(in_srgb,var(--ink)_8%,transparent)]">
 		<div class="mb-6">
 			<div>
 				<div class="pc-kicker mb-2">Session setup</div>
@@ -173,7 +173,7 @@
 			<div class="mt-3 text-sm leading-6 text-[var(--ink-2)]">{selectedPreset.shortDescription}</div>
 
 			{#if pendingPreset}
-				<div class="mt-4 rounded-[3px] border border-[var(--copper)] bg-[rgba(180,86,42,0.08)] p-4">
+				<div class="mt-4 rounded-[3px] border border-[var(--copper)] bg-[color-mix(in_srgb,var(--copper)_8%,transparent)] p-4">
 					<div class="pc-mono text-[10px] uppercase tracking-[0.1em] text-[var(--copper-3)]">
 						Apply new mode?
 					</div>

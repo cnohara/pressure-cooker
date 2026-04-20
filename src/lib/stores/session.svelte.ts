@@ -30,6 +30,9 @@ function roundAwarenessNote(currentRound: number, totalRounds: number, role: 'bu
 	const isFinal = currentRound === totalRounds;
 
 	if (role === 'builder') {
+		if (currentRound > totalRounds) {
+			return `\n\n[FINAL SYNTHESIS — ${totalRounds} rounds of critique complete] The critic has delivered their final assessment. Now produce your definitive, polished final response that fully incorporates all feedback. This is the version that will be presented as the final output.`;
+		}
 		if (isFinal) {
 			return `\n\n[ROUND ${currentRound} OF ${totalRounds} — FINAL ROUND] This is your last opportunity to refine. Produce your most complete, robust version of the plan, addressing all remaining criticisms as thoroughly as possible.`;
 		}
@@ -186,6 +189,9 @@ export async function startSession(config: {
 		llm2Instruction: config.llm2Instruction,
 		totalRounds: config.totalRounds,
 		rounds: [],
+		finalBuilderOutput: '',
+		finalBuilderStatus: 'idle',
+		finalBuilderCost: 0,
 		summaryEnabled: config.summaryEnabled,
 		summaryOutput: '',
 		summaryStatus: 'idle',
@@ -301,6 +307,34 @@ export async function startSession(config: {
 		if ((session.status as SessionState['status']) === 'stopped') {
 			saveToHistory(session);
 			return;
+		}
+
+		// Final builder synthesis — one extra builder turn to incorporate the last critic's feedback
+		session = { ...session, finalBuilderStatus: 'streaming' };
+		const finalBuilderMsgs = buildBuilderMessages(
+			pauseInstructions.llm1,
+			config.topic,
+			config.totalRounds,
+			session.rounds,
+			config.totalRounds + 1
+		);
+		try {
+			const { cost } = await runStream(
+				config.apiKey,
+				config.llm1Model,
+				finalBuilderMsgs,
+				(text) => { session!.finalBuilderOutput += text; },
+				20000
+			);
+			session = { ...session, finalBuilderStatus: 'complete', finalBuilderCost: cost };
+			session.totalActualCost += cost;
+		} catch (e) {
+			session = { ...session, finalBuilderStatus: 'complete' };
+			await handleStreamError(e, config.totalRounds + 1, 'Builder (final synthesis)');
+			if ((session.status as SessionState['status']) === 'stopped' || session.status === 'error') {
+				saveToHistory(session);
+				return;
+			}
 		}
 
 		// Summary

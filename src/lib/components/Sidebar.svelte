@@ -2,7 +2,6 @@
 	import type { RoundOutput, SessionStatus } from '$lib/api/types';
 	import PressureCookerViz from './PressureCookerViz.svelte';
 	import SessionDetailsTray from './SessionDetailsTray.svelte';
-	import VibePanel from './VibePanel.svelte';
 
 	let {
 		rounds,
@@ -49,7 +48,6 @@
 	</div>
 
 	<PressureCookerViz convergenceScore={latestScore} roundCount={totalRounds} currentRound={currentRound} />
-	<VibePanel {rounds} currentRoundIndex={Math.max(0, currentRound - 1)} {totalRounds} onselect={onSelectRound} />
 	<SessionDetailsTray
 		{tokens}
 		{spentUsd}

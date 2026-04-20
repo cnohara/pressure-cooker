@@ -43,6 +43,8 @@ export interface RoundOutput {
 export type SessionStatus = 'idle' | 'running' | 'paused' | 'complete' | 'stopped' | 'error';
 export type SummaryStatus = 'idle' | 'streaming' | 'complete';
 
+export type FinalBuilderStatus = 'idle' | 'streaming' | 'complete';
+
 export interface SessionState {
 	id: string;
 	topic: string;
@@ -52,6 +54,9 @@ export interface SessionState {
 	llm2Instruction: string;
 	totalRounds: number;
 	rounds: RoundOutput[];
+	finalBuilderOutput: string;
+	finalBuilderStatus: FinalBuilderStatus;
+	finalBuilderCost: number;
 	summaryEnabled: boolean;
 	summaryOutput: string;
 	summaryStatus: SummaryStatus;

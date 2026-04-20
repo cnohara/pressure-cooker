@@ -41,7 +41,7 @@
 	const roleInitial = $derived(role === 'builder' ? 'B' : 'C');
 </script>
 
-<section class="flex h-[620px] min-h-0 min-w-0 flex-col bg-[rgba(242,235,222,0.78)] max-[980px]:h-[420px]">
+<section class="flex h-[620px] min-h-0 min-w-0 flex-col bg-[var(--canvas)] max-[980px]:h-[420px]">
 	<div class="flex items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
 		<div class="flex items-center gap-3">
 			<div class="grid h-9 w-9 place-items-center rounded-full text-sm font-semibold text-[var(--canvas)]" style={`background:${roleColor}`}>{roleInitial}</div>

@@ -50,13 +50,13 @@
 					round.state === 'active'
 						? 'border-[var(--ink)] bg-[var(--ink)] text-[var(--canvas)] shadow-[0_2px_0_var(--copper-3)]'
 						: round.state === 'pending'
-							? 'border-dashed border-[var(--line-2)] bg-[rgba(242,235,222,0.4)] text-[var(--ink-3)]'
-							: 'border-[var(--line)] bg-[rgba(230,219,195,0.8)] text-[var(--ink)]'
+							? 'border-dashed border-[var(--line-2)] bg-[color-mix(in_srgb,var(--canvas)_60%,transparent)] text-[var(--ink-3)]'
+							: 'border-[var(--line)] bg-[color-mix(in_srgb,var(--canvas-2)_80%,transparent)] text-[var(--ink)]'
 				}`}
 			>
 				<span class="pc-serif text-[22px] leading-none">{String(round.number).padStart(2, '0')}</span>
 				<div class="min-w-0 flex-1">
-					<div class={`pc-mono text-[9px] uppercase tracking-[0.12em] ${round.state === 'active' ? 'text-[#E8DCBF]' : 'text-[var(--ink-3)]'}`}>{round.label}</div>
+					<div class={`pc-mono text-[9px] uppercase tracking-[0.12em] ${round.state === 'active' ? 'text-[var(--canvas-2)]' : 'text-[var(--ink-3)]'}`}>{round.label}</div>
 					<div class="pc-mono truncate text-[10px] font-semibold">{round.value}</div>
 				</div>
 				{#if round.score != null}
