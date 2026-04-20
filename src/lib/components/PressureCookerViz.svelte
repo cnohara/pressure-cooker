@@ -12,336 +12,318 @@
 	const isActive = $derived(sessionStatus === 'running' || sessionStatus === 'paused');
 	const isComplete = $derived(sessionStatus === 'complete' || sessionStatus === 'stopped');
 
-	// Average of all available convergence scores
-	const latestScore = $derived(() => {
+	const latestScore = $derived.by(() => {
 		const scored = convergenceScores.filter((s): s is number => s !== undefined);
-		if (!scored.length) return 0;
-		return scored[scored.length - 1];
+		return scored.length ? scored[scored.length - 1] : 0;
 	});
 
-	const avgScore = $derived(() => {
-		const scored = convergenceScores.filter((s): s is number => s !== undefined);
-		if (!scored.length) return 0;
-		return Math.round(scored.reduce((a, b) => a + b, 0) / scored.length);
+	const gaugeColor = $derived.by(() => {
+		if (latestScore < 30) return '#ef4444';
+		if (latestScore < 60) return '#f97316';
+		if (latestScore < 80) return '#eab308';
+		return '#22c55e';
 	});
 
-	// Gauge arc: semicircle, 180° sweep
-	// needle rotates from -90deg (0%) to +90deg (100%)
-	const needleAngle = $derived(-90 + latestScore() * 1.8);
-
-	// Color based on score
-	const gaugeColor = $derived(() => {
-		const s = latestScore();
-		if (s < 30) return '#ef4444';   // red
-		if (s < 60) return '#f97316';   // orange
-		if (s < 80) return '#eab308';   // yellow
-		return '#22c55e';               // green
-	});
-
-	// Arc path for SVG gauge fill
-	function arcPath(pct: number): string {
-		const cx = 60, cy = 60, r = 44;
-		const startAngle = Math.PI; // left (0%)
-		const endAngle = startAngle - (pct / 100) * Math.PI; // sweeps right
-		const x1 = cx + r * Math.cos(startAngle);
-		const y1 = cy + r * Math.sin(startAngle);
-		const x2 = cx + r * Math.cos(endAngle);
-		const y2 = cy + r * Math.sin(endAngle);
-		const largeArc = pct > 50 ? 1 : 0;
-		return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
-	}
-
-	const label = $derived(() => {
+	const pressureLabel = $derived.by(() => {
 		if (!isActive && !isComplete) return '';
-		const s = latestScore();
-		if (s < 20) return 'Raw';
-		if (s < 45) return 'Heating';
-		if (s < 65) return 'Simmering';
-		if (s < 80) return 'Pressurized';
-		if (s < 95) return 'Nearly Done';
-		return 'Fully Cooked';
+		if (latestScore < 20) return 'Raw';
+		if (latestScore < 45) return 'Heating';
+		if (latestScore < 65) return 'Simmering';
+		if (latestScore < 80) return 'Pressurized';
+		if (latestScore < 95) return 'Nearly Done';
+		return 'Fully Cooked!';
 	});
+
+	const needleAngle = $derived(-90 + latestScore * 1.8);
+
+	function describeArc(pct: number): string {
+		const cx = 50, cy = 50, r = 38;
+		if (pct <= 0) return '';
+		if (pct >= 100) pct = 99.9;
+		const startRad = Math.PI;
+		const endRad = Math.PI - (pct / 100) * Math.PI;
+		const x1 = cx + r * Math.cos(startRad);
+		const y1 = cy + r * Math.sin(startRad);
+		const x2 = cx + r * Math.cos(endRad);
+		const y2 = cy + r * Math.sin(endRad);
+		const large = pct > 50 ? 1 : 0;
+		return `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+	}
 </script>
 
 <div class="flex flex-col items-center gap-3 select-none">
-	<!-- Pixel art pressure cooker -->
-	<div class="relative" style="width:120px;height:120px">
-		<!-- Pot body (isometric pixel art via CSS) -->
-		<div class="cooker-wrap" class:active={isActive} class:done={isComplete}>
-			<!-- Top face -->
-			<div class="face top-face"></div>
-			<!-- Front face -->
-			<div class="face front-face"></div>
-			<!-- Right face -->
-			<div class="face right-face"></div>
-			<!-- Lid -->
-			<div class="face lid"></div>
-			<!-- Handle left -->
-			<div class="handle left-handle"></div>
-			<!-- Handle right -->
-			<div class="handle right-handle"></div>
-			<!-- Pressure knob -->
-			<div class="knob" class:spinning={isActive}></div>
-			<!-- Gauge window on front -->
-			<div class="gauge-window">
-				<div class="gauge-fill" style="width:{(latestScore()/100)*100}%"></div>
-			</div>
-		</div>
 
-		<!-- Steam wisps -->
+	<!--
+		Pixel-art pressure cooker — 32×44 pixel grid, each pixel = 3px → 96×132 display.
+		Shape: round pot (oval body), flat lid, knob handle, steam wisps, flames underneath.
+		Palette:
+		  Pot body:     #4a3f8c (dark purple) / #6257a8 (mid) / #7a6ec0 (highlight)
+		  Lid:          #3d3475 / #544a9e
+		  Knob:         #1a1535
+		  Steam:        #c7d2fe at 70%
+		  Flame orange: #f97316 / red: #dc2626 / yellow: #fbbf24 / dark: #7c2d12
+	-->
+	<svg
+		width="96"
+		height="132"
+		viewBox="0 0 96 132"
+		shape-rendering="crispEdges"
+		class="overflow-visible pixel-cooker"
+		class:active={isActive}
+		class:done={isComplete}
+		aria-label="Pressure cooker animation"
+	>
+		<!-- ═══ STEAM (above knob, animated when active) ═══ -->
 		{#if isActive}
-			<div class="steam-container">
-				<div class="steam s1"></div>
-				<div class="steam s2"></div>
-				<div class="steam s3"></div>
-			</div>
+			<g class="steam-group" opacity="0.75">
+				<!-- left wisp -->
+				<rect x="33" y="3"  width="3" height="6" fill="#c7d2fe" class="steam-a"/>
+				<rect x="30" y="0"  width="3" height="3" fill="#c7d2fe" class="steam-a"/>
+				<!-- centre wisp -->
+				<rect x="45" y="0"  width="3" height="9" fill="#e0e7ff" class="steam-b"/>
+				<rect x="48" y="0"  width="3" height="6" fill="#c7d2fe" class="steam-b"/>
+				<!-- right wisp -->
+				<rect x="60" y="3"  width="3" height="6" fill="#c7d2fe" class="steam-c"/>
+				<rect x="63" y="0"  width="3" height="3" fill="#c7d2fe" class="steam-c"/>
+			</g>
 		{/if}
 
-		<!-- Completion burst -->
+		<!-- ═══ LID KNOB / HANDLE ═══ -->
+		<rect x="42" y="12" width="12" height="3"  fill="#1a1535"/>
+		<rect x="39" y="15" width="18" height="3"  fill="#2d2660"/>
+		<rect x="39" y="15" width="18" height="1"  fill="#4a4090"/><!-- knob top sheen -->
+
+		<!-- ═══ LID ═══ -->
+		<!-- lid highlight row -->
+		<rect x="18" y="18" width="60" height="3"  fill="#7a6ec0"/>
+		<!-- lid main -->
+		<rect x="15" y="21" width="66" height="9"  fill="#544a9e"/>
+		<!-- lid left sheen -->
+		<rect x="15" y="21" width="6"  height="9"  fill="#6b60b8"/>
+		<!-- lid right shadow -->
+		<rect x="75" y="21" width="6"  height="9"  fill="#3d3475"/>
+		<!-- lid bottom edge -->
+		<rect x="15" y="30" width="66" height="3"  fill="#2d2660"/>
+
+		<!-- ═══ POT BODY — stepped oval ═══ -->
+		<!-- step in from lid: row 33 -->
+		<rect x="21" y="33" width="54" height="3"  fill="#5a4fa6"/>
+		<rect x="21" y="33" width="6"  height="3"  fill="#7a6ec0"/><!-- hl -->
+		<rect x="69" y="33" width="6"  height="3"  fill="#3d3475"/><!-- sh -->
+
+		<!-- row 36: wider -->
+		<rect x="18" y="36" width="60" height="3"  fill="#5a4fa6"/>
+		<rect x="18" y="36" width="6"  height="3"  fill="#7a6ec0"/>
+		<rect x="72" y="36" width="6"  height="3"  fill="#3d3475"/>
+
+		<!-- row 39: widest -->
+		<rect x="15" y="39" width="66" height="3"  fill="#5a4fa6"/>
+		<rect x="15" y="39" width="6"  height="3"  fill="#7a6ec0"/>
+		<rect x="75" y="39" width="6"  height="3"  fill="#3d3475"/>
+
+		<!-- HANDLES (sticking out at mid-body) -->
+		<!-- left handle -->
+		<rect x="0"  y="45" width="15" height="18" fill="#3d3475"/>
+		<rect x="0"  y="45" width="15" height="3"  fill="#544a9e"/><!-- handle top -->
+		<rect x="0"  y="60" width="15" height="3"  fill="#1a1535"/><!-- handle bottom -->
+		<rect x="0"  y="48" width="3"  height="12" fill="#544a9e"/><!-- handle left sheen -->
+		<!-- right handle -->
+		<rect x="81" y="45" width="15" height="18" fill="#3d3475"/>
+		<rect x="81" y="45" width="15" height="3"  fill="#544a9e"/>
+		<rect x="81" y="60" width="15" height="3"  fill="#1a1535"/>
+		<rect x="93" y="48" width="3"  height="12" fill="#1a1535"/>
+
+		<!-- body main flat section -->
+		<rect x="15" y="42" width="66" height="33" fill="#4a3f8c"/>
+		<!-- body left highlight strip -->
+		<rect x="15" y="42" width="9"  height="33" fill="#6257a8"/>
+		<!-- body right shadow strip -->
+		<rect x="72" y="42" width="9"  height="33" fill="#2d2460"/>
+
+		<!-- body bottom steps (oval curve) -->
+		<rect x="15" y="75" width="66" height="3"  fill="#4a3f8c"/>
+		<rect x="15" y="75" width="9"  height="3"  fill="#6257a8"/>
+		<rect x="72" y="75" width="9"  height="3"  fill="#2d2460"/>
+
+		<rect x="18" y="78" width="60" height="3"  fill="#3d3475"/>
+		<rect x="21" y="81" width="54" height="3"  fill="#2d2660"/>
+		<rect x="27" y="84" width="42" height="3"  fill="#1a1535"/>
+
+		<!-- Pressure gauge mini display on body -->
+		<rect x="33" y="51" width="30" height="15" fill="#0f0d1f"/><!-- bezel -->
+		<rect x="34" y="52" width="28" height="13" fill="#0a0818"/><!-- screen -->
+		<!-- bar fill -->
+		{#if (isActive || isComplete) && latestScore > 0}
+			<rect x="35" y="57" width={Math.round((latestScore / 100) * 26)} height="5" fill={gaugeColor}/>
+		{:else}
+			<rect x="35" y="57" width="0"  height="5" fill="#1a1535"/>
+		{/if}
+		<!-- bar bg -->
+		<rect x="35" y="57" width="26" height="1"  fill="#1a1535" opacity="0.5"/>
+		<!-- tick marks -->
+		<rect x="35" y="53" width="1"  height="3"  fill="#2d2a50"/>
+		<rect x="48" y="53" width="1"  height="3"  fill="#2d2a50"/>
+		<rect x="60" y="53" width="1"  height="3"  fill="#2d2a50"/>
+
+		<!-- completion overlay tint -->
 		{#if isComplete}
-			<div class="completion-ring"></div>
+			<rect x="15" y="18" width="66" height="72" fill="#22c55e" opacity="0.07"/>
 		{/if}
-	</div>
 
-	<!-- Arc pressure gauge -->
+		<!-- ═══ FLAMES ═══ -->
+		{#if isActive || isComplete}
+			<!-- flame base plate -->
+			<rect x="9"  y="90" width="78" height="3"  fill="#7c2d12"/>
+
+			<!-- dark base -->
+			<rect x="9"  y="93" width="78" height="3"  fill="#dc2626"/>
+			<rect x="12" y="96" width="72" height="3"  fill="#dc2626"/>
+
+			<!-- orange layer -->
+			<rect x="9"  y="93" width="12" height="12" fill="#ea580c"/>
+			<rect x="75" y="93" width="12" height="12" fill="#ea580c"/>
+			<rect x="21" y="90" width="54" height="15" fill="#f97316"/>
+
+			<!-- yellow tips — 5 flame columns -->
+			<!-- flame 1 (left) -->
+			<rect x="12" y="87" width="9"  height="9"  fill="#f97316"/>
+			<rect x="15" y="84" width="3"  height="3"  fill="#fbbf24"/>
+			<!-- flame 2 -->
+			<rect x="27" y="84" width="12" height="12" fill="#f97316"/>
+			<rect x="30" y="81" width="6"  height="3"  fill="#fbbf24"/>
+			<rect x="33" y="78" width="3"  height="3"  fill="#fef08a"/>
+			<!-- flame 3 (centre, tallest) -->
+			<rect x="42" y="81" width="12" height="15" fill="#f97316"/>
+			<rect x="45" y="75" width="6"  height="9"  fill="#fbbf24"/>
+			<rect x="46" y="72" width="4"  height="3"  fill="#fef08a"/>
+			<!-- flame 4 -->
+			<rect x="57" y="84" width="12" height="12" fill="#f97316"/>
+			<rect x="60" y="81" width="6"  height="3"  fill="#fbbf24"/>
+			<rect x="63" y="78" width="3"  height="3"  fill="#fef08a"/>
+			<!-- flame 5 (right) -->
+			<rect x="75" y="87" width="9"  height="9"  fill="#f97316"/>
+			<rect x="78" y="84" width="3"  height="3"  fill="#fbbf24"/>
+
+			<!-- flame shimmer animation overlay -->
+			<rect x="42" y="78" width="12" height="3"  fill="#fbbf24" class="flame-flicker" opacity="0.8"/>
+		{:else}
+			<!-- cold stove grate -->
+			<rect x="9"  y="90" width="78" height="3"  fill="#1f2937"/>
+			<rect x="9"  y="93" width="78" height="9"  fill="#111827"/>
+			<rect x="12" y="93" width="3"  height="9"  fill="#1f2937"/>
+			<rect x="27" y="93" width="3"  height="9"  fill="#1f2937"/>
+			<rect x="42" y="93" width="3"  height="9"  fill="#1f2937"/>
+			<rect x="57" y="93" width="3"  height="9"  fill="#1f2937"/>
+			<rect x="72" y="93" width="3"  height="9"  fill="#1f2937"/>
+		{/if}
+	</svg>
+
+	<!-- ═══ Convergence Pressure Gauge ═══ -->
 	{#if isActive || isComplete}
 		<div class="flex flex-col items-center gap-1">
-			<svg width="120" height="68" viewBox="0 0 120 68" class="overflow-visible">
-				<!-- Background arc -->
-				<path
-					d={arcPath(100)}
-					fill="none"
-					stroke="#2a2a2a"
-					stroke-width="8"
-					stroke-linecap="round"
-				/>
-				<!-- Fill arc -->
-				<path
-					d={arcPath(latestScore())}
-					fill="none"
-					stroke={gaugeColor()}
-					stroke-width="8"
-					stroke-linecap="round"
-					class="gauge-arc-fill"
-				/>
-				<!-- Needle -->
-				<g transform="translate(60,60) rotate({needleAngle})">
-					<line x1="0" y1="0" x2="0" y2="-36" stroke={gaugeColor()} stroke-width="2" stroke-linecap="round" />
-					<circle cx="0" cy="0" r="3" fill={gaugeColor()} />
+			<svg width="100" height="60" viewBox="0 0 100 60" style="overflow:visible">
+				<!-- background arc -->
+				<path d="M 12 50 A 38 38 0 0 1 88 50" fill="none" stroke="#2a2a2a" stroke-width="7" stroke-linecap="butt"/>
+				<!-- fill arc -->
+				{#if latestScore > 0}
+					<path
+						d={describeArc(latestScore)}
+						fill="none"
+						stroke={gaugeColor}
+						stroke-width="7"
+						stroke-linecap="butt"
+						style="transition: stroke 0.5s;"
+					/>
+				{/if}
+				<!-- tick marks -->
+				{#each [0, 25, 50, 75, 100] as pct}
+					{@const ang = Math.PI - (pct / 100) * Math.PI}
+					<line
+						x1={(50 + 44 * Math.cos(ang)).toFixed(1)}
+						y1={(50 + 44 * Math.sin(ang)).toFixed(1)}
+						x2={(50 + 36 * Math.cos(ang)).toFixed(1)}
+						y2={(50 + 36 * Math.sin(ang)).toFixed(1)}
+						stroke="#374151"
+						stroke-width="1.5"
+					/>
+				{/each}
+				<!-- needle -->
+				<g
+					transform="translate(50,50) rotate({needleAngle})"
+					style="transition: transform 0.8s cubic-bezier(.34,1.56,.64,1);"
+				>
+					<line x1="0" y1="5" x2="0" y2="-30" stroke={gaugeColor} stroke-width="2" stroke-linecap="round" style="transition: stroke 0.5s;"/>
+					<circle cx="0" cy="0" r="4" fill="#111" stroke={gaugeColor} stroke-width="1.5"/>
 				</g>
-				<!-- Score text -->
-				<text x="60" y="58" text-anchor="middle" class="gauge-score" fill={gaugeColor()}>
-					{latestScore()}
-				</text>
-				<!-- Labels -->
-				<text x="14" y="66" text-anchor="middle" font-size="8" fill="#4b5563">0</text>
-				<text x="106" y="66" text-anchor="middle" font-size="8" fill="#4b5563">100</text>
+				<!-- score -->
+				<text
+					x="50" y="54"
+					text-anchor="middle"
+					font-family="'JetBrains Mono',monospace"
+					font-size="11"
+					font-weight="bold"
+					fill={gaugeColor}
+					style="transition: fill 0.5s;"
+				>{latestScore}</text>
+				<text x="8"  y="58" text-anchor="middle" font-family="monospace" font-size="8" fill="#4b5563">L</text>
+				<text x="92" y="58" text-anchor="middle" font-family="monospace" font-size="8" fill="#4b5563">H</text>
 			</svg>
 
-			<div class="text-xs font-mono" style="color:{gaugeColor()}">{label()}</div>
+			<div class="text-xs font-mono font-semibold min-h-4" style="color:{gaugeColor}; transition: color 0.5s;">
+				{pressureLabel}
+			</div>
 
-			<!-- Round dots -->
+			<!-- Per-round dot trail -->
 			{#if convergenceScores.length > 0}
-				<div class="flex items-center gap-1 mt-1">
+				<div class="flex items-center gap-1.5">
 					{#each { length: totalRounds } as _, i}
 						{@const score = convergenceScores[i]}
 						<div
-							class="w-2 h-2 rounded-full transition-all duration-500"
-							style="background:{score !== undefined ? (score < 30 ? '#ef4444' : score < 60 ? '#f97316' : score < 80 ? '#eab308' : '#22c55e') : '#2a2a2a'}"
-							title={score !== undefined ? `Round ${i+1}: ${score}%` : `Round ${i+1}`}
+							class="w-2 h-2 transition-all duration-500 border border-[#2a2a2a]"
+							style="background:{score !== undefined ? (score < 30 ? '#ef4444' : score < 60 ? '#f97316' : score < 80 ? '#eab308' : '#22c55e') : '#1a1a1a'}"
+							title={score !== undefined ? `Round ${i + 1}: ${score}` : `Round ${i + 1}: pending`}
 						></div>
 					{/each}
 				</div>
 			{/if}
 
-			<div class="text-xs text-gray-600">Convergence Pressure</div>
+			<div class="text-xs text-gray-600 font-mono">Convergence Pressure</div>
 		</div>
 	{/if}
 </div>
 
 <style>
-	.cooker-wrap {
-		position: relative;
-		width: 80px;
-		height: 80px;
-		margin: 20px auto 0;
-		transform-style: preserve-3d;
-		transition: filter 0.5s;
+	.pixel-cooker.active {
+		filter: drop-shadow(0 0 10px #f9731650);
+		animation: pot-throb 2s ease-in-out infinite;
+	}
+	.pixel-cooker.done {
+		filter: drop-shadow(0 0 8px #22c55e50);
 	}
 
-	.cooker-wrap.active {
-		filter: drop-shadow(0 0 10px #f9731680) drop-shadow(0 0 20px #f9731640);
-		animation: pot-pulse 2s ease-in-out infinite;
+	@keyframes pot-throb {
+		0%, 100% { filter: drop-shadow(0 0 6px #f9731630); }
+		50%       { filter: drop-shadow(0 0 16px #f9731670); }
 	}
 
-	.cooker-wrap.done {
-		filter: drop-shadow(0 0 8px #22c55e80);
-	}
-
-	@keyframes pot-pulse {
-		0%, 100% { filter: drop-shadow(0 0 8px #f9731660) drop-shadow(0 0 16px #f9731630); }
-		50% { filter: drop-shadow(0 0 16px #f97316aa) drop-shadow(0 0 32px #f9731660); }
-	}
-
-	/* Isometric pixel pot faces */
-	.face {
-		position: absolute;
-		image-rendering: pixelated;
-	}
-
-	.top-face {
-		width: 60px;
-		height: 20px;
-		background: #6b7280;
-		top: 10px;
-		left: 10px;
-		transform: skewX(-30deg);
-		border: 1px solid #374151;
-	}
-
-	.front-face {
-		width: 50px;
-		height: 40px;
-		background: #374151;
-		top: 26px;
-		left: 10px;
-		border: 1px solid #1f2937;
-	}
-
-	.right-face {
-		width: 22px;
-		height: 40px;
-		background: #1f2937;
-		top: 26px;
-		left: 58px;
-		transform: skewY(-30deg);
-		border: 1px solid #111827;
-	}
-
-	.lid {
-		width: 64px;
-		height: 12px;
-		background: #4b5563;
-		top: 6px;
-		left: 8px;
-		transform: skewX(-30deg);
-		border: 1px solid #374151;
-	}
-
-	.handle {
-		position: absolute;
-		width: 8px;
-		height: 14px;
-		background: #9ca3af;
-		border: 1px solid #6b7280;
-		border-radius: 2px;
-	}
-
-	.left-handle {
-		top: 30px;
-		left: 2px;
-	}
-
-	.right-handle {
-		top: 30px;
-		left: 70px;
-	}
-
-	.knob {
-		position: absolute;
-		width: 10px;
-		height: 10px;
-		background: #d97706;
-		border: 1px solid #92400e;
-		border-radius: 50%;
-		top: 0px;
-		left: 35px;
-		transition: all 0.3s;
-	}
-
-	.knob.spinning {
-		animation: knob-spin 1.5s linear infinite;
-		background: #f97316;
-		box-shadow: 0 0 6px #f97316;
-	}
-
-	@keyframes knob-spin {
-		0% { transform: rotate(0deg); }
-		100% { transform: rotate(360deg); }
-	}
-
-	.gauge-window {
-		position: absolute;
-		width: 24px;
-		height: 8px;
-		background: #111;
-		border: 1px solid #4b5563;
-		top: 38px;
-		left: 18px;
-		border-radius: 2px;
-		overflow: hidden;
-	}
-
-	.gauge-fill {
-		height: 100%;
-		background: #f97316;
-		transition: width 1s ease-out;
-	}
-
-	/* Steam wisps */
-	.steam-container {
-		position: absolute;
-		top: 0px;
-		left: 30px;
-		pointer-events: none;
-	}
-
-	.steam {
-		position: absolute;
-		width: 6px;
-		border-radius: 50%;
-		background: rgba(255,255,255,0.15);
-		animation: steam-rise 2s ease-in infinite;
-		filter: blur(3px);
-	}
-
-	.s1 { width: 8px; height: 20px; left: 0px; animation-delay: 0s; }
-	.s2 { width: 6px; height: 16px; left: 12px; animation-delay: 0.6s; }
-	.s3 { width: 5px; height: 14px; left: 24px; animation-delay: 1.2s; }
+	/* Steam wisps rise and fade */
+	.steam-a { animation: steam-rise 2.0s ease-out 0.0s infinite; }
+	.steam-b { animation: steam-rise 1.6s ease-out 0.7s infinite; }
+	.steam-c { animation: steam-rise 2.2s ease-out 1.3s infinite; }
 
 	@keyframes steam-rise {
-		0% { opacity: 0; transform: translateY(0) scaleX(1); }
-		20% { opacity: 0.7; }
-		100% { opacity: 0; transform: translateY(-40px) scaleX(2.5); }
+		0%   { opacity: 0.8; transform: translateY(0)   scaleX(1); }
+		50%  { opacity: 0.4; }
+		100% { opacity: 0;   transform: translateY(-20px) scaleX(1.8); }
 	}
 
-	/* Completion ring */
-	.completion-ring {
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		width: 80px;
-		height: 80px;
-		margin: -40px 0 0 -40px;
-		border-radius: 50%;
-		border: 2px solid #22c55e;
-		animation: ring-expand 0.6s ease-out forwards;
-		pointer-events: none;
+	/* Flame flicker */
+	.flame-flicker {
+		animation: flicker 0.18s steps(2) infinite;
 	}
-
-	@keyframes ring-expand {
-		0% { transform: scale(0.5); opacity: 1; }
-		100% { transform: scale(2); opacity: 0; }
-	}
-
-	/* SVG gauge */
-	.gauge-arc-fill {
-		transition: stroke-dashoffset 0.8s ease-out, stroke 0.5s;
-	}
-
-	.gauge-score {
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 14px;
-		font-weight: bold;
+	@keyframes flicker {
+		0%   { opacity: 0.9; }
+		50%  { opacity: 0.3; }
+		100% { opacity: 0.9; }
 	}
 </style>

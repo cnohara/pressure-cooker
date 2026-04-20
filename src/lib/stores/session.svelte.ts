@@ -306,13 +306,19 @@ export async function startSession(config: {
 		// Summary
 		if (config.summaryEnabled && session.status !== 'stopped') {
 			session = { ...session, summaryStatus: 'streaming' };
-			const summaryModel = getCheapestPopular();
-			if (summaryModel) {
-				let summaryText = `Below is a multi-round plan refinement session. The topic was: ${config.topic}.\n\n`;
+			// Use a reliable fast model — NOT cheapest (low-quality models hallucinate badly on long prompts)
+			const SUMMARY_MODEL = 'google/gemini-2.0-flash-001';
+			const summaryModelId = SUMMARY_MODEL;
+			if (summaryModelId) {
+				// Only send the final plan + all critiques to keep the prompt focused and short
+				const finalPlan = session.rounds[session.rounds.length - 1]?.builderOutput ?? '';
+				let summaryText = `Topic: ${config.topic}\n\n`;
+				summaryText += `Final plan (after ${session.rounds.length} rounds of refinement):\n${finalPlan}\n\n`;
+				summaryText += `Critiques across rounds:\n`;
 				for (const round of session.rounds) {
-					summaryText += `Round ${round.roundNumber} Plan:\n${round.builderOutput}\n\nRound ${round.roundNumber} Critique:\n${round.criticOutput}\n\n`;
+					summaryText += `Round ${round.roundNumber}: ${round.criticOutput.slice(0, 600)}\n\n`;
 				}
-				summaryText += `Final Plan (Round ${session.rounds.length}):\n${session.rounds[session.rounds.length - 1]?.builderOutput ?? ''}\n\nPlease provide:\n1. What meaningfully improved across the rounds\n2. What the critic consistently flagged\n3. What remains unresolved or uncertain in the final plan\nKeep your response under 400 words.`;
+				summaryText += `In under 300 words, provide:\n1. What meaningfully improved across rounds\n2. What the critic consistently flagged\n3. What remains unresolved in the final plan\n\nBe concise and specific. Do not pad or repeat.`;
 
 				const summaryMsgs = [
 					{ role: 'system', content: 'You are a concise analyst.' },
@@ -322,7 +328,7 @@ export async function startSession(config: {
 				try {
 					await runStream(
 						config.apiKey,
-						summaryModel.id,
+						summaryModelId,
 						summaryMsgs,
 						(text) => { session!.summaryOutput += text; },
 						20000
